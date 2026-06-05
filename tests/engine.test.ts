@@ -6,10 +6,14 @@ import {
 } from "../src/engine";
 import type { PasswordPersistenceCallbacks } from "../src/interfaces";
 
-function createPersistenceMock(history: string[] = []): PasswordPersistenceCallbacks {
+function createPersistenceMock(
+    history: string[] = [],
+    previousSubstrings?: string[],
+): PasswordPersistenceCallbacks {
     return {
         getPasswordHistory: vi.fn(async () => history),
         saveNewPassword: vi.fn(async () => undefined),
+        getPreviousPasswordSubstrings: vi.fn(async () => previousSubstrings ?? []),
     };
 }
 
@@ -266,6 +270,34 @@ describe("IdentityPolicyEngine - rotation", () => {
         expect(allowed).toBe(false);
         expect(compareFn).toHaveBeenCalledTimes(1);
     });
+
+    it("blocks password rotation when candidate includes previous secret substrings", async () => {
+        const engine = new IdentityPolicyEngine({
+            blockSubstringsFromPreviousSecrets: true,
+            minPreviousSecretSubstringLength: 4,
+            persistence: createPersistenceMock(["h1"], ["legacy", "abc"]),
+        });
+
+        const compareFn = vi.fn(async () => false);
+        const allowed = await engine.validateRotation("MyLegacyPassword#2026", "user-1", compareFn);
+
+        expect(allowed).toBe(false);
+        expect(compareFn).not.toHaveBeenCalled();
+    });
+
+    it("ignores previous secret fragments shorter than the configured minimum", async () => {
+        const engine = new IdentityPolicyEngine({
+            blockSubstringsFromPreviousSecrets: true,
+            minPreviousSecretSubstringLength: 5,
+            persistence: createPersistenceMock(["h1"], ["legacy", "abcd"]),
+        });
+
+        const compareFn = vi.fn(async () => false);
+        const allowed = await engine.validateRotation("abcd-safe-password", "user-1", compareFn);
+
+        expect(allowed).toBe(true);
+        expect(compareFn).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe("IdentityPolicyEngine - minimum password age", () => {
@@ -380,5 +412,19 @@ describe("IdentityPolicyEngine - config validation", () => {
                 persistence: createPersistenceMock(),
             });
         }).toThrow("minimumPasswordAgeDays must be a non-negative integer.");
+    });
+
+    it("throws when previous-secret substring blocking is enabled without the required callback", () => {
+        expect(() => {
+            new IdentityPolicyEngine({
+                blockSubstringsFromPreviousSecrets: true,
+                persistence: {
+                    getPasswordHistory: async () => [],
+                    saveNewPassword: async () => undefined,
+                },
+            });
+        }).toThrow(
+            "getPreviousPasswordSubstrings persistence callback is required when blockSubstringsFromPreviousSecrets is enabled.",
+        );
     });
 });
