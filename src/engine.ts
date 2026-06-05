@@ -1,5 +1,6 @@
 import {
     type ComplexityValidationResult,
+    type PasswordHistoryComparator,
     type IdentityPolicyEngineOptions,
     type PasswordCompareFn,
     type PasswordCreatedAtInput,
@@ -108,14 +109,26 @@ export class IdentityPolicyEngine {
     public async validateRotation(
         plainPassword: string,
         userId: string,
-        compareFn: PasswordCompareFn,
+        comparator: PasswordHistoryComparator,
     ): Promise<boolean> {
         const normalizedPlainPassword = normalizePasswordInput(plainPassword, this.config);
         const history = await this.config.persistence.getPasswordHistory(userId);
         const limitedHistory = history.slice(0, this.config.historyLimit);
 
+        if (!isPasswordCompareFn(comparator)) {
+            const isReused = await comparator.isReused({
+                userId,
+                plainPassword,
+                normalizedPassword: normalizedPlainPassword,
+                history: limitedHistory,
+                historyLimit: this.config.historyLimit,
+            });
+
+            return !isReused;
+        }
+
         for (const previousHash of limitedHistory) {
-            const isReused = await compareFn(normalizedPlainPassword, previousHash);
+            const isReused = await comparator(normalizedPlainPassword, previousHash);
             if (isReused) {
                 return false;
             }
@@ -277,6 +290,10 @@ function normalizePasswordInput(
 
 function isValidUnicodeNormalizationForm(value: string): value is PasswordUnicodeNormalizationForm {
     return value === "NFC" || value === "NFD" || value === "NFKC" || value === "NFKD";
+}
+
+function isPasswordCompareFn(comparator: PasswordHistoryComparator): comparator is PasswordCompareFn {
+    return typeof comparator === "function";
 }
 
 function hasRepeatedChars(password: string, threshold: number): boolean {

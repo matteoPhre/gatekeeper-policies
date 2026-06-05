@@ -209,6 +209,33 @@ describe("IdentityPolicyEngine - rotation", () => {
         expect(allowed).toBe(true);
         expect(compareFn).toHaveBeenCalledTimes(2);
     });
+
+    it("supports custom history comparison strategies for advanced stores", async () => {
+        const engine = new IdentityPolicyEngine({
+            historyLimit: 2,
+            normalizeTrim: true,
+            persistence: createPersistenceMock(["h1", "h2", "h3"]),
+        });
+
+        const strategy = {
+            isReused: vi.fn(async (context) => {
+                expect(context).toMatchObject({
+                    userId: "user-1",
+                    plainPassword: "  candidate  ",
+                    normalizedPassword: "candidate",
+                    history: ["h1", "h2"],
+                    historyLimit: 2,
+                });
+
+                return true;
+            }),
+        };
+
+        const allowed = await engine.validateRotation("  candidate  ", "user-1", strategy);
+
+        expect(allowed).toBe(false);
+        expect(strategy.isReused).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe("IdentityPolicyEngine - minimum password age", () => {
