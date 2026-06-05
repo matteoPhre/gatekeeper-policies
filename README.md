@@ -33,6 +33,11 @@ An index entrypoint exports all modules:
 npm install gatekeeper-policies
 ```
 
+Runtime requirements:
+
+- Node.js `>=22`
+- npm `>=10`
+
 ## Release and Publish (npm)
 
 Recommended release sequence:
