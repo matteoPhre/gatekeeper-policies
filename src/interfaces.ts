@@ -41,6 +41,22 @@ export type PasswordCompareFn = (
     encrypted: string,
 ) => Promise<boolean>;
 
+export interface PasswordHistoryComparisonContext {
+    userId: string;
+    plainPassword: string;
+    normalizedPassword: string;
+    history: readonly string[];
+    historyLimit: number;
+}
+
+export interface PasswordHistoryComparisonStrategy {
+    isReused(context: PasswordHistoryComparisonContext): Promise<boolean>;
+}
+
+export type PasswordHistoryComparator =
+    | PasswordCompareFn
+    | PasswordHistoryComparisonStrategy;
+
 export interface PasswordSubjectContext {
     userId: string;
     passwordCreatedAt: Date;
