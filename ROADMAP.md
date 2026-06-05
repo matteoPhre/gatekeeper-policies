@@ -15,7 +15,7 @@ This roadmap focuses on strengthening policy controls while preserving the curre
 1. [x] Add policy option to enforce minimum password age before change.
 2. [x] Add optional history comparison strategy interface for advanced stores.
 3. [x] Add bulk-history comparison helper for optimized remote adapters.
-4. Add optional policy to block substrings from previous secrets.
+4. [x] Add optional policy to block substrings from previous secrets.
 
 ## Phase 3 - Expiry Lifecycle Extensions
 

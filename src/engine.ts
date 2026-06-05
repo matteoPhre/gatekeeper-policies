@@ -31,6 +31,8 @@ export const DEFAULT_POLICY_CONFIG: Required<PasswordPolicyConfig> = {
     expiryDays: 90,
     minimumPasswordAgeDays: 0,
     historyLimit: 5,
+    blockSubstringsFromPreviousSecrets: false,
+    minPreviousSecretSubstringLength: 4,
 };
 
 export interface ResolvedIdentityPolicyEngineOptions
@@ -114,6 +116,15 @@ export class IdentityPolicyEngine {
         comparator: PasswordHistoryComparator,
     ): Promise<boolean> {
         const normalizedPlainPassword = normalizePasswordInput(plainPassword, this.config);
+
+        if (this.config.blockSubstringsFromPreviousSecrets) {
+            const previousSubstrings = await this.config.persistence.getPreviousPasswordSubstrings?.(userId);
+
+            if (hasBlockedPreviousSecretSubstring(normalizedPlainPassword, previousSubstrings, this.config)) {
+                return false;
+            }
+        }
+
         const history = await this.config.persistence.getPasswordHistory(userId);
         const limitedHistory = history.slice(0, this.config.historyLimit);
 
@@ -220,6 +231,12 @@ function resolveEngineOptions(
         minimumPasswordAgeDays:
             options.minimumPasswordAgeDays ?? DEFAULT_POLICY_CONFIG.minimumPasswordAgeDays,
         historyLimit: options.historyLimit ?? DEFAULT_POLICY_CONFIG.historyLimit,
+        blockSubstringsFromPreviousSecrets:
+            options.blockSubstringsFromPreviousSecrets
+            ?? DEFAULT_POLICY_CONFIG.blockSubstringsFromPreviousSecrets,
+        minPreviousSecretSubstringLength:
+            options.minPreviousSecretSubstringLength
+            ?? DEFAULT_POLICY_CONFIG.minPreviousSecretSubstringLength,
         persistence: options.persistence,
     };
 
@@ -269,6 +286,22 @@ function resolveEngineOptions(
         throw new RangeError("historyLimit must be an integer greater than 0.");
     }
 
+    if (
+        !Number.isInteger(config.minPreviousSecretSubstringLength)
+        || config.minPreviousSecretSubstringLength < 1
+    ) {
+        throw new RangeError("minPreviousSecretSubstringLength must be an integer greater than 0.");
+    }
+
+    if (
+        config.blockSubstringsFromPreviousSecrets
+        && typeof config.persistence.getPreviousPasswordSubstrings !== "function"
+    ) {
+        throw new TypeError(
+            "getPreviousPasswordSubstrings persistence callback is required when blockSubstringsFromPreviousSecrets is enabled.",
+        );
+    }
+
     return config;
 }
 
@@ -310,6 +343,33 @@ function isValidUnicodeNormalizationForm(value: string): value is PasswordUnicod
 
 function isPasswordCompareFn(comparator: PasswordHistoryComparator): comparator is PasswordCompareFn {
     return typeof comparator === "function";
+}
+
+function hasBlockedPreviousSecretSubstring(
+    normalizedPassword: string,
+    previousSubstrings: readonly string[] | undefined,
+    config: Pick<
+        ResolvedIdentityPolicyEngineOptions,
+        | "normalizeTrim"
+        | "normalizeUnicode"
+        | "unicodeNormalizationForm"
+        | "minPreviousSecretSubstringLength"
+    >,
+): boolean {
+    if (!previousSubstrings || previousSubstrings.length === 0) {
+        return false;
+    }
+
+    const candidate = normalizedPassword.toLowerCase();
+
+    return previousSubstrings.some((entry) => {
+        const normalizedEntry = normalizePasswordInput(entry, config).trim().toLowerCase();
+
+        return (
+            normalizedEntry.length >= config.minPreviousSecretSubstringLength
+            && candidate.includes(normalizedEntry)
+        );
+    });
 }
 
 function hasRepeatedChars(password: string, threshold: number): boolean {
