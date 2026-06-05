@@ -36,3 +36,23 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Security audit (production dependencies)
+        run: npm run security:audit:prod
+
+      - name: Verify package contents
+        run: npm run security:pack
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dependency review
+        uses: actions/dependency-review-action@v4
