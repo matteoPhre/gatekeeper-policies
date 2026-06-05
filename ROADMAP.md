@@ -12,7 +12,7 @@ This roadmap focuses on strengthening policy controls while preserving the curre
 
 ## Phase 2 - Rotation and Reuse Controls
 
-1. Add policy option to enforce minimum password age before change.
+1. [x] Add policy option to enforce minimum password age before change.
 2. Add optional history comparison strategy interface for advanced stores.
 3. Add bulk-history comparison helper for optimized remote adapters.
 4. Add optional policy to block substrings from previous secrets.

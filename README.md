@@ -199,6 +199,7 @@ These examples are intended as implementation references and do not introduce fr
 - `preventSequentialChars` (default `false`)
 - `maxSequentialChars` (default `3`)
 - `expiryDays` (default `90`)
+- `minimumPasswordAgeDays` (default `0`, disables minimum-age enforcement)
 - `historyLimit` (default `5`)
 - `persistence.getPasswordHistory(userId)`
 - `persistence.saveNewPassword(userId, newHash)`
@@ -223,6 +224,10 @@ These examples are intended as implementation references and do not introduce fr
 ### 4. Expiry Evaluation
 
 `isPasswordExpired(passwordCreatedAt)` accepts `Date | string` and evaluates expiration with `expiryDays`.
+
+### 5. Minimum Password Age
+
+`isMinimumPasswordAgeSatisfied(passwordCreatedAt)` accepts `Date | string` and enforces the optional `minimumPasswordAgeDays` policy before allowing a password change.
 
 ## Usage
 
@@ -269,6 +274,7 @@ They can be attached to any framework that offers compatible request/response co
 | getConfig | `getConfig(): Readonly<ResolvedIdentityPolicyEngineOptions>` | Returns the resolved runtime configuration (defaults applied). |
 | validateComplexity | `validateComplexity(password: string): { isValid: boolean; errors: string[] }` | Evaluates password complexity against the active policy. |
 | validateRotation | `validateRotation(plainPassword: string, userId: string, compareFn: PasswordCompareFn): Promise<boolean>` | Prevents password reuse by comparing candidate value with historical hashes. |
+| isMinimumPasswordAgeSatisfied | `isMinimumPasswordAgeSatisfied(passwordCreatedAt: Date | string): boolean` | Enforces the optional minimum-age requirement before a password can be changed. |
 | isPasswordExpired | `isPasswordExpired(passwordCreatedAt: Date | string): boolean` | Checks whether password age exceeds configured expiry window. |
 
 ### Utility Functions
