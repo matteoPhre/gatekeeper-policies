@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { IdentityPolicyEngine, normalizePasswordCreatedAt } from "../src/engine";
+import {
+    createBulkPasswordHistoryComparisonStrategy,
+    IdentityPolicyEngine,
+    normalizePasswordCreatedAt,
+} from "../src/engine";
 import type { PasswordPersistenceCallbacks } from "../src/interfaces";
 
 function createPersistenceMock(history: string[] = []): PasswordPersistenceCallbacks {
@@ -235,6 +239,32 @@ describe("IdentityPolicyEngine - rotation", () => {
 
         expect(allowed).toBe(false);
         expect(strategy.isReused).toHaveBeenCalledTimes(1);
+    });
+
+    it("provides a bulk-history helper for optimized remote adapters", async () => {
+        const engine = new IdentityPolicyEngine({
+            historyLimit: 2,
+            normalizeTrim: true,
+            persistence: createPersistenceMock(["h1", "h2", "h3"]),
+        });
+
+        const compareFn = vi.fn(async (normalizedPassword, history, context) => {
+            expect(normalizedPassword).toBe("candidate");
+            expect(history).toEqual(["h1", "h2"]);
+            expect(context).toEqual({
+                userId: "user-1",
+                plainPassword: "  candidate  ",
+                historyLimit: 2,
+            });
+
+            return true;
+        });
+
+        const comparator = createBulkPasswordHistoryComparisonStrategy(compareFn);
+        const allowed = await engine.validateRotation("  candidate  ", "user-1", comparator);
+
+        expect(allowed).toBe(false);
+        expect(compareFn).toHaveBeenCalledTimes(1);
     });
 });
 

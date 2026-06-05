@@ -57,6 +57,12 @@ export type PasswordHistoryComparator =
     | PasswordCompareFn
     | PasswordHistoryComparisonStrategy;
 
+export type BulkPasswordHistoryCompareFn = (
+    data: string | Uint8Array,
+    history: readonly string[],
+    context: Omit<PasswordHistoryComparisonContext, "history" | "normalizedPassword">,
+) => Promise<boolean>;
+
 export interface PasswordSubjectContext {
     userId: string;
     passwordCreatedAt: Date;

@@ -226,6 +226,8 @@ These examples are intended as implementation references and do not introduce fr
 
 For advanced stores, `validateRotation(...)` also accepts a strategy object with `isReused(context)` so callers can offload bulk or remote comparison logic.
 
+For optimized remote adapters, `createBulkPasswordHistoryComparisonStrategy(compareFn)` adapts a single bulk comparison callback into a `PasswordHistoryComparisonStrategy`.
+
 ### 4. Expiry Evaluation
 
 `isPasswordExpired(passwordCreatedAt)` accepts `Date | string` and evaluates expiration with `expiryDays`.
@@ -306,6 +308,7 @@ Important contracts are defined in `src/interfaces.ts`:
 - `PasswordCompareFn`
 - `PasswordHistoryComparator`
 - `PasswordHistoryComparisonStrategy`
+- `BulkPasswordHistoryCompareFn`
 - `CreateStatusJsonExpiryMiddlewareOptions`
 - `CreateCodeSendExpiryHookOptions`
 
