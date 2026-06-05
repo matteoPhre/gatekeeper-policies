@@ -18,12 +18,16 @@ export interface PasswordPolicyConfig {
     preventSequentialChars?: boolean;
     maxSequentialChars?: number;
     expiryDays?: number;
+    minimumPasswordAgeDays?: number;
     historyLimit?: number;
+    blockSubstringsFromPreviousSecrets?: boolean;
+    minPreviousSecretSubstringLength?: number;
 }
 
 export interface PasswordPersistenceCallbacks {
     getPasswordHistory(userId: string): Promise<string[]>;
     saveNewPassword(userId: string, newHash: string): Promise<void>;
+    getPreviousPasswordSubstrings?(userId: string): Promise<string[]>;
 }
 
 export interface IdentityPolicyEngineOptions extends PasswordPolicyConfig {
@@ -38,6 +42,28 @@ export interface ComplexityValidationResult {
 export type PasswordCompareFn = (
     data: string | Uint8Array,
     encrypted: string,
+) => Promise<boolean>;
+
+export interface PasswordHistoryComparisonContext {
+    userId: string;
+    plainPassword: string;
+    normalizedPassword: string;
+    history: readonly string[];
+    historyLimit: number;
+}
+
+export interface PasswordHistoryComparisonStrategy {
+    isReused(context: PasswordHistoryComparisonContext): Promise<boolean>;
+}
+
+export type PasswordHistoryComparator =
+    | PasswordCompareFn
+    | PasswordHistoryComparisonStrategy;
+
+export type BulkPasswordHistoryCompareFn = (
+    data: string | Uint8Array,
+    history: readonly string[],
+    context: Omit<PasswordHistoryComparisonContext, "history" | "normalizedPassword">,
 ) => Promise<boolean>;
 
 export interface PasswordSubjectContext {

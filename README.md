@@ -199,9 +199,13 @@ These examples are intended as implementation references and do not introduce fr
 - `preventSequentialChars` (default `false`)
 - `maxSequentialChars` (default `3`)
 - `expiryDays` (default `90`)
+- `minimumPasswordAgeDays` (default `0`, disables minimum-age enforcement)
 - `historyLimit` (default `5`)
+- `blockSubstringsFromPreviousSecrets` (default `false`)
+- `minPreviousSecretSubstringLength` (default `4`)
 - `persistence.getPasswordHistory(userId)`
 - `persistence.saveNewPassword(userId, newHash)`
+- `persistence.getPreviousPasswordSubstrings(userId)` when substring blocking is enabled
 
 ### 2. Complexity Validation
 
@@ -213,16 +217,29 @@ These examples are intended as implementation references and do not introduce fr
 
 ### 3. Rotation Validation
 
-`validateRotation(plainPassword, userId, compareFn)`:
+`validateRotation(plainPassword, userId, comparator)`:
 - retrieves password history from application callback
-- compares plain password against previous hashes
+- compares plain password against previous hashes or delegates to a strategy object
 - blocks reuse when a match is found
 
-`compareFn` is intentionally injected and can wrap bcrypt, argon2 verification, or any custom strategy.
+`comparator` can be either:
+
+- a `PasswordCompareFn` for per-hash checks (bcrypt, argon2, custom verification)
+- a `PasswordHistoryComparisonStrategy` for advanced stores that can evaluate reuse in bulk or remotely
+
+For advanced stores, `validateRotation(...)` also accepts a strategy object with `isReused(context)` so callers can offload bulk or remote comparison logic.
+
+For optimized remote adapters, `createBulkPasswordHistoryComparisonStrategy(compareFn)` adapts a single bulk comparison callback into a `PasswordHistoryComparisonStrategy`.
+
+When `blockSubstringsFromPreviousSecrets` is enabled, the engine also checks `persistence.getPreviousPasswordSubstrings(userId)` and blocks candidates containing sufficiently long fragments from previous secrets.
 
 ### 4. Expiry Evaluation
 
 `isPasswordExpired(passwordCreatedAt)` accepts `Date | string` and evaluates expiration with `expiryDays`.
+
+### 5. Minimum Password Age
+
+`isMinimumPasswordAgeSatisfied(passwordCreatedAt)` accepts `Date | string` and enforces the optional `minimumPasswordAgeDays` policy before allowing a password change.
 
 ## Usage
 
@@ -268,7 +285,8 @@ They can be attached to any framework that offers compatible request/response co
 | constructor | `new IdentityPolicyEngine(options)` | Creates an engine instance with policy settings and persistence callbacks. |
 | getConfig | `getConfig(): Readonly<ResolvedIdentityPolicyEngineOptions>` | Returns the resolved runtime configuration (defaults applied). |
 | validateComplexity | `validateComplexity(password: string): { isValid: boolean; errors: string[] }` | Evaluates password complexity against the active policy. |
-| validateRotation | `validateRotation(plainPassword: string, userId: string, compareFn: PasswordCompareFn): Promise<boolean>` | Prevents password reuse by comparing candidate value with historical hashes. |
+| validateRotation | `validateRotation(plainPassword: string, userId: string, comparator: PasswordCompareFn | PasswordHistoryComparisonStrategy): Promise<boolean>` | Prevents password reuse by comparing candidate value with historical hashes or a caller-provided strategy object. |
+| isMinimumPasswordAgeSatisfied | `isMinimumPasswordAgeSatisfied(passwordCreatedAt: Date | string): boolean` | Enforces the optional minimum-age requirement before a password can be changed. |
 | isPasswordExpired | `isPasswordExpired(passwordCreatedAt: Date | string): boolean` | Checks whether password age exceeds configured expiry window. |
 
 ### Utility Functions
@@ -293,6 +311,9 @@ Important contracts are defined in `src/interfaces.ts`:
 - `PasswordPersistenceCallbacks`
 - `IdentityPolicyEngineOptions`
 - `PasswordCompareFn`
+- `PasswordHistoryComparator`
+- `PasswordHistoryComparisonStrategy`
+- `BulkPasswordHistoryCompareFn`
 - `CreateStatusJsonExpiryMiddlewareOptions`
 - `CreateCodeSendExpiryHookOptions`
 

@@ -1,5 +1,8 @@
 import {
+    type BulkPasswordHistoryCompareFn,
     type ComplexityValidationResult,
+    type PasswordHistoryComparator,
+    type PasswordHistoryComparisonStrategy,
     type IdentityPolicyEngineOptions,
     type PasswordCompareFn,
     type PasswordCreatedAtInput,
@@ -26,7 +29,10 @@ export const DEFAULT_POLICY_CONFIG: Required<PasswordPolicyConfig> = {
     preventSequentialChars: false,
     maxSequentialChars: 3,
     expiryDays: 90,
+    minimumPasswordAgeDays: 0,
     historyLimit: 5,
+    blockSubstringsFromPreviousSecrets: false,
+    minPreviousSecretSubstringLength: 4,
 };
 
 export interface ResolvedIdentityPolicyEngineOptions
@@ -107,14 +113,35 @@ export class IdentityPolicyEngine {
     public async validateRotation(
         plainPassword: string,
         userId: string,
-        compareFn: PasswordCompareFn,
+        comparator: PasswordHistoryComparator,
     ): Promise<boolean> {
         const normalizedPlainPassword = normalizePasswordInput(plainPassword, this.config);
+
+        if (this.config.blockSubstringsFromPreviousSecrets) {
+            const previousSubstrings = await this.config.persistence.getPreviousPasswordSubstrings?.(userId);
+
+            if (hasBlockedPreviousSecretSubstring(normalizedPlainPassword, previousSubstrings, this.config)) {
+                return false;
+            }
+        }
+
         const history = await this.config.persistence.getPasswordHistory(userId);
         const limitedHistory = history.slice(0, this.config.historyLimit);
 
+        if (!isPasswordCompareFn(comparator)) {
+            const isReused = await comparator.isReused({
+                userId,
+                plainPassword,
+                normalizedPassword: normalizedPlainPassword,
+                history: limitedHistory,
+                historyLimit: this.config.historyLimit,
+            });
+
+            return !isReused;
+        }
+
         for (const previousHash of limitedHistory) {
-            const isReused = await compareFn(normalizedPlainPassword, previousHash);
+            const isReused = await comparator(normalizedPlainPassword, previousHash);
             if (isReused) {
                 return false;
             }
@@ -130,6 +157,19 @@ export class IdentityPolicyEngine {
         const maxAgeInMs = this.config.expiryDays * MS_PER_DAY;
 
         return ageInMs >= maxAgeInMs;
+    }
+
+    public isMinimumPasswordAgeSatisfied(passwordCreatedAt: PasswordCreatedAtInput): boolean {
+        if (this.config.minimumPasswordAgeDays === 0) {
+            return true;
+        }
+
+        const createdAt = normalizePasswordCreatedAt(passwordCreatedAt);
+        const now = Date.now();
+        const ageInMs = now - createdAt.getTime();
+        const minimumAgeInMs = this.config.minimumPasswordAgeDays * MS_PER_DAY;
+
+        return ageInMs >= minimumAgeInMs;
     }
 }
 
@@ -148,6 +188,20 @@ export function normalizePasswordCreatedAt(passwordCreatedAt: PasswordCreatedAtI
     }
 
     return parsed;
+}
+
+export function createBulkPasswordHistoryComparisonStrategy(
+    compareFn: BulkPasswordHistoryCompareFn,
+): PasswordHistoryComparisonStrategy {
+    return {
+        async isReused(context) {
+            return compareFn(context.normalizedPassword, context.history, {
+                userId: context.userId,
+                plainPassword: context.plainPassword,
+                historyLimit: context.historyLimit,
+            });
+        },
+    };
 }
 
 function resolveEngineOptions(
@@ -174,7 +228,15 @@ function resolveEngineOptions(
         preventSequentialChars: options.preventSequentialChars ?? DEFAULT_POLICY_CONFIG.preventSequentialChars,
         maxSequentialChars: options.maxSequentialChars ?? DEFAULT_POLICY_CONFIG.maxSequentialChars,
         expiryDays: options.expiryDays ?? DEFAULT_POLICY_CONFIG.expiryDays,
+        minimumPasswordAgeDays:
+            options.minimumPasswordAgeDays ?? DEFAULT_POLICY_CONFIG.minimumPasswordAgeDays,
         historyLimit: options.historyLimit ?? DEFAULT_POLICY_CONFIG.historyLimit,
+        blockSubstringsFromPreviousSecrets:
+            options.blockSubstringsFromPreviousSecrets
+            ?? DEFAULT_POLICY_CONFIG.blockSubstringsFromPreviousSecrets,
+        minPreviousSecretSubstringLength:
+            options.minPreviousSecretSubstringLength
+            ?? DEFAULT_POLICY_CONFIG.minPreviousSecretSubstringLength,
         persistence: options.persistence,
     };
 
@@ -216,8 +278,28 @@ function resolveEngineOptions(
         throw new RangeError("expiryDays must be an integer greater than 0.");
     }
 
+    if (!Number.isInteger(config.minimumPasswordAgeDays) || config.minimumPasswordAgeDays < 0) {
+        throw new RangeError("minimumPasswordAgeDays must be a non-negative integer.");
+    }
+
     if (!Number.isInteger(config.historyLimit) || config.historyLimit < 1) {
         throw new RangeError("historyLimit must be an integer greater than 0.");
+    }
+
+    if (
+        !Number.isInteger(config.minPreviousSecretSubstringLength)
+        || config.minPreviousSecretSubstringLength < 1
+    ) {
+        throw new RangeError("minPreviousSecretSubstringLength must be an integer greater than 0.");
+    }
+
+    if (
+        config.blockSubstringsFromPreviousSecrets
+        && typeof config.persistence.getPreviousPasswordSubstrings !== "function"
+    ) {
+        throw new TypeError(
+            "getPreviousPasswordSubstrings persistence callback is required when blockSubstringsFromPreviousSecrets is enabled.",
+        );
     }
 
     return config;
@@ -257,6 +339,37 @@ function normalizePasswordInput(
 
 function isValidUnicodeNormalizationForm(value: string): value is PasswordUnicodeNormalizationForm {
     return value === "NFC" || value === "NFD" || value === "NFKC" || value === "NFKD";
+}
+
+function isPasswordCompareFn(comparator: PasswordHistoryComparator): comparator is PasswordCompareFn {
+    return typeof comparator === "function";
+}
+
+function hasBlockedPreviousSecretSubstring(
+    normalizedPassword: string,
+    previousSubstrings: readonly string[] | undefined,
+    config: Pick<
+        ResolvedIdentityPolicyEngineOptions,
+        | "normalizeTrim"
+        | "normalizeUnicode"
+        | "unicodeNormalizationForm"
+        | "minPreviousSecretSubstringLength"
+    >,
+): boolean {
+    if (!previousSubstrings || previousSubstrings.length === 0) {
+        return false;
+    }
+
+    const candidate = normalizedPassword.toLowerCase();
+
+    return previousSubstrings.some((entry) => {
+        const normalizedEntry = normalizePasswordInput(entry, config).trim().toLowerCase();
+
+        return (
+            normalizedEntry.length >= config.minPreviousSecretSubstringLength
+            && candidate.includes(normalizedEntry)
+        );
+    });
 }
 
 function hasRepeatedChars(password: string, threshold: number): boolean {
