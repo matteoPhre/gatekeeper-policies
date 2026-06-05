@@ -56,6 +56,33 @@ Available scripts:
 - `npm run security:pack`: verifies package contents with `npm pack --dry-run`
 - `npm run release:check`: build + tests + production audit + package dry run
 
+## Versioning
+
+This project follows Semantic Versioning with a practical rule for early releases:
+
+- `0.y.z`: initial development phase, breaking changes can happen on minor bumps
+- `1.0.0+`: stable API contract, breaking changes only on major bumps
+
+Current baseline release target:
+
+- `0.0.1`: first tagged public baseline
+
+Suggested release flow:
+
+```bash
+npm version patch
+git push origin main --follow-tags
+```
+
+Or manually for the first baseline tag:
+
+```bash
+git tag -a v0.0.1 -m "release: v0.0.1"
+git push origin v0.0.1
+```
+
+When the `v*` tag is pushed, GitHub Actions runs the release workflow and publishes to npm.
+
 ## Quick Start
 
 ### 1. Engine only
