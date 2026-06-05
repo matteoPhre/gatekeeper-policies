@@ -1,6 +1,6 @@
 {
-  "name": "gatekeeper-policies",
-  "version": "0.0.1",
+  "name": "@matteophre/gatekeeper-policies",
+  "version": "0.0.2",
   "description": "An enterprise-grade, database-agnostic password policy engine for Node.js",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

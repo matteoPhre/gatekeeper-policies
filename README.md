@@ -1,6 +1,6 @@
 # gatekeeper-policies
 
-`gatekeeper-policies` is a TypeScript library for enterprise-grade password lifecycle management in Node.js applications.
+`@matteophre/gatekeeper-policies` is a TypeScript library for enterprise-grade password lifecycle management in Node.js applications.
 
 The library is intentionally unopinionated:
 - no ORM dependencies
@@ -30,7 +30,7 @@ An index entrypoint exports all modules:
 ## Installation
 
 ```bash
-npm install gatekeeper-policies
+npm install @matteophre/gatekeeper-policies
 ```
 
 Runtime requirements:
@@ -70,7 +70,7 @@ This project follows Semantic Versioning with a practical rule for early release
 
 Current baseline release target:
 
-- `0.0.1`: first tagged public baseline
+- `0.0.2`: first tagged public baseline for scoped npm publish
 
 Suggested release flow:
 
@@ -82,8 +82,8 @@ git push origin main --follow-tags
 Or manually for the first baseline tag:
 
 ```bash
-git tag -a v0.0.1 -m "release: v0.0.1"
-git push origin v0.0.1
+git tag -a v0.0.2 -m "release: v0.0.2"
+git push origin v0.0.2
 ```
 
 When the `v*` tag is pushed, GitHub Actions runs the release workflow and publishes to npm.
@@ -101,7 +101,7 @@ Release prerequisites for GitHub Actions:
 Use this mode if you only need policy evaluation in application services.
 
 ```ts
-import { IdentityPolicyEngine } from "gatekeeper-policies";
+import { IdentityPolicyEngine } from "@matteophre/gatekeeper-policies";
 
 const engine = new IdentityPolicyEngine({
 	persistence: {
@@ -134,7 +134,7 @@ Use this mode for custom runtimes and in-house HTTP abstractions.
 import {
 	createStatusJsonExpiryMiddleware,
 	IdentityPolicyEngine,
-} from "gatekeeper-policies";
+} from "@matteophre/gatekeeper-policies";
 
 type RequestShape = {
 	auth: {
@@ -229,7 +229,7 @@ These examples are intended as implementation references and do not introduce fr
 ### Engine Example
 
 ```ts
-import { IdentityPolicyEngine } from "gatekeeper-policies";
+import { IdentityPolicyEngine } from "@matteophre/gatekeeper-policies";
 
 const engine = new IdentityPolicyEngine({
 	minLength: 12,
