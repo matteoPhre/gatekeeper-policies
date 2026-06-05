@@ -211,6 +211,52 @@ describe("IdentityPolicyEngine - rotation", () => {
     });
 });
 
+describe("IdentityPolicyEngine - minimum password age", () => {
+    it("allows password change when minimumPasswordAgeDays is disabled", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+        const engine = new IdentityPolicyEngine({
+            persistence: createPersistenceMock(),
+        });
+
+        const allowed = engine.isMinimumPasswordAgeSatisfied("2026-06-04T00:00:00.000Z");
+
+        expect(allowed).toBe(true);
+        vi.useRealTimers();
+    });
+
+    it("blocks password change when minimum age has not been reached", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+        const engine = new IdentityPolicyEngine({
+            minimumPasswordAgeDays: 7,
+            persistence: createPersistenceMock(),
+        });
+
+        const allowed = engine.isMinimumPasswordAgeSatisfied("2026-06-01T00:00:00.000Z");
+
+        expect(allowed).toBe(false);
+        vi.useRealTimers();
+    });
+
+    it("allows password change when minimum age has been reached", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+        const engine = new IdentityPolicyEngine({
+            minimumPasswordAgeDays: 7,
+            persistence: createPersistenceMock(),
+        });
+
+        const allowed = engine.isMinimumPasswordAgeSatisfied("2026-05-29T00:00:00.000Z");
+
+        expect(allowed).toBe(true);
+        vi.useRealTimers();
+    });
+});
+
 describe("IdentityPolicyEngine - expiry", () => {
     it("marks password as expired when age is greater or equal than expiryDays", () => {
         vi.useFakeTimers();
@@ -268,5 +314,14 @@ describe("IdentityPolicyEngine - config validation", () => {
                 persistence: createPersistenceMock(),
             });
         }).toThrow("maxLength must be greater than or equal to minLength.");
+    });
+
+    it("throws when minimumPasswordAgeDays is negative", () => {
+        expect(() => {
+            new IdentityPolicyEngine({
+                minimumPasswordAgeDays: -1,
+                persistence: createPersistenceMock(),
+            });
+        }).toThrow("minimumPasswordAgeDays must be a non-negative integer.");
     });
 });
