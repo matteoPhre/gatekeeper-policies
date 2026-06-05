@@ -86,13 +86,13 @@ git tag -a v0.0.2 -m "release: v0.0.2"
 git push origin v0.0.2
 ```
 
-When the `v*` tag is pushed, GitHub Actions runs the release workflow and publishes to npm.
+Releases are currently published manually from a trusted local environment.
 
-Release prerequisites for GitHub Actions:
+Manual publish prerequisites:
 
-- Repository secret `NPM_TOKEN` must be configured
-- Token should be an npm Automation token with publish permissions
+- npm account with publish permissions on `@matteophre`
 - npm account email must be verified
+- run publish from a local authenticated session (`npm whoami`)
 
 ## Quick Start
 
