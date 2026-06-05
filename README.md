@@ -83,6 +83,12 @@ git push origin v0.0.1
 
 When the `v*` tag is pushed, GitHub Actions runs the release workflow and publishes to npm.
 
+Release prerequisites for GitHub Actions:
+
+- Repository secret `NPM_TOKEN` must be configured
+- Token should be an npm Automation token with publish permissions
+- npm account email must be verified
+
 ## Quick Start
 
 ### 1. Engine only
