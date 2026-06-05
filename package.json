@@ -1,0 +1,61 @@
+{
+  "name": "gatekeeper-policies",
+  "version": "1.0.0",
+  "description": "An enterprise-grade, database-agnostic password policy engine for Node.js",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint 'src/**/*.ts'",
+    "security:audit:prod": "npm audit --omit=dev",
+    "security:audit:dev": "npm audit",
+    "security:pack": "npm pack --dry-run",
+    "release:check": "npm run build && npm test && npm run security:audit:prod && npm run security:pack",
+    "publish:npm:dry": "npm publish --dry-run --access public",
+    "publish:npm": "npm publish --access public --provenance",
+    "prepublishOnly": "npm run release:check"
+  },
+  "keywords": [
+    "password",
+    "policy",
+    "identity",
+    "rotation",
+    "expiry",
+    "security",
+    "agnostic"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.5",
+    "@types/node": "^22.0.0",
+    "@types/supertest": "^6.0.3",
+    "express": "^5.1.0",
+    "fastify": "^5.0.0",
+    "supertest": "^7.0.0",
+    "typescript": "^5.4.0",
+    "tsup": "^8.0.0",
+    "vitest": "^4.1.8"
+  }
+}

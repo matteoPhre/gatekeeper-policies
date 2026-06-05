@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+*.log
+.env
+.env.*
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local demo sandbox (not committed)
+demo-local/
