@@ -1,6 +1,8 @@
 import {
+    type BulkPasswordHistoryCompareFn,
     type ComplexityValidationResult,
     type PasswordHistoryComparator,
+    type PasswordHistoryComparisonStrategy,
     type IdentityPolicyEngineOptions,
     type PasswordCompareFn,
     type PasswordCreatedAtInput,
@@ -175,6 +177,20 @@ export function normalizePasswordCreatedAt(passwordCreatedAt: PasswordCreatedAtI
     }
 
     return parsed;
+}
+
+export function createBulkPasswordHistoryComparisonStrategy(
+    compareFn: BulkPasswordHistoryCompareFn,
+): PasswordHistoryComparisonStrategy {
+    return {
+        async isReused(context) {
+            return compareFn(context.normalizedPassword, context.history, {
+                userId: context.userId,
+                plainPassword: context.plainPassword,
+                historyLimit: context.historyLimit,
+            });
+        },
+    };
 }
 
 function resolveEngineOptions(
