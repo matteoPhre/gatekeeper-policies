@@ -159,6 +159,20 @@ export class IdentityPolicyEngine {
         return ageInMs >= maxAgeInMs;
     }
 
+    public daysUntilExpiry(passwordCreatedAt: PasswordCreatedAtInput): number {
+        const createdAt = normalizePasswordCreatedAt(passwordCreatedAt);
+        const now = Date.now();
+        const ageInMs = now - createdAt.getTime();
+        const maxAgeInMs = this.config.expiryDays * MS_PER_DAY;
+        const remainingMs = maxAgeInMs - ageInMs;
+
+        if (remainingMs <= 0) {
+            return 0;
+        }
+
+        return Math.ceil(remainingMs / MS_PER_DAY);
+    }
+
     public isMinimumPasswordAgeSatisfied(passwordCreatedAt: PasswordCreatedAtInput): boolean {
         if (this.config.minimumPasswordAgeDays === 0) {
             return true;

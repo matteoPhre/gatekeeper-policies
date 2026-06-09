@@ -237,6 +237,8 @@ When `blockSubstringsFromPreviousSecrets` is enabled, the engine also checks `pe
 
 `isPasswordExpired(passwordCreatedAt)` accepts `Date | string` and evaluates expiration with `expiryDays`.
 
+`daysUntilExpiry(passwordCreatedAt)` accepts `Date | string` and returns remaining days before expiry (`0` when expired).
+
 ### 5. Minimum Password Age
 
 `isMinimumPasswordAgeSatisfied(passwordCreatedAt)` accepts `Date | string` and enforces the optional `minimumPasswordAgeDays` policy before allowing a password change.
@@ -288,6 +290,7 @@ They can be attached to any framework that offers compatible request/response co
 | validateRotation | `validateRotation(plainPassword: string, userId: string, comparator: PasswordCompareFn | PasswordHistoryComparisonStrategy): Promise<boolean>` | Prevents password reuse by comparing candidate value with historical hashes or a caller-provided strategy object. |
 | isMinimumPasswordAgeSatisfied | `isMinimumPasswordAgeSatisfied(passwordCreatedAt: Date | string): boolean` | Enforces the optional minimum-age requirement before a password can be changed. |
 | isPasswordExpired | `isPasswordExpired(passwordCreatedAt: Date | string): boolean` | Checks whether password age exceeds configured expiry window. |
+| daysUntilExpiry | `daysUntilExpiry(passwordCreatedAt: Date | string): number` | Returns remaining days before expiry, clamped to `0` when already expired. |
 
 ### Utility Functions
 

@@ -376,6 +376,36 @@ describe("IdentityPolicyEngine - expiry", () => {
         expect(expired).toBe(false);
         vi.useRealTimers();
     });
+
+    it("returns remaining days until expiry", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+        const engine = new IdentityPolicyEngine({
+            expiryDays: 90,
+            persistence: createPersistenceMock(),
+        });
+
+        const remainingDays = engine.daysUntilExpiry("2026-03-08T00:00:00.000Z");
+
+        expect(remainingDays).toBe(1);
+        vi.useRealTimers();
+    });
+
+    it("returns zero days when password is already expired", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+        const engine = new IdentityPolicyEngine({
+            expiryDays: 90,
+            persistence: createPersistenceMock(),
+        });
+
+        const remainingDays = engine.daysUntilExpiry("2026-03-07T00:00:00.000Z");
+
+        expect(remainingDays).toBe(0);
+        vi.useRealTimers();
+    });
 });
 
 describe("normalizePasswordCreatedAt", () => {
