@@ -57,6 +57,22 @@ export interface PasswordAuditEvent {
 
 export type PasswordAuditEventCallback = (event: PasswordAuditEvent) => Promise<void> | void;
 
+export type PasswordValidationIssueCode =
+    | "PASSWORD_TOO_SHORT"
+    | "PASSWORD_TOO_LONG"
+    | "PASSWORD_MISSING_UPPERCASE"
+    | "PASSWORD_MISSING_LOWERCASE"
+    | "PASSWORD_MISSING_NUMBER"
+    | "PASSWORD_MISSING_SYMBOL"
+    | "PASSWORD_DENY_LISTED_PATTERN"
+    | "PASSWORD_REPEATED_CONSECUTIVE_CHARS"
+    | "PASSWORD_SEQUENTIAL_CHAR_RUN";
+
+export interface PasswordValidationIssue {
+    code: PasswordValidationIssueCode;
+    message: string;
+}
+
 export interface IdentityPolicyEngineOptions extends PasswordPolicyConfig {
     persistence: PasswordPersistenceCallbacks;
     auditEventCallback?: PasswordAuditEventCallback;
@@ -65,6 +81,7 @@ export interface IdentityPolicyEngineOptions extends PasswordPolicyConfig {
 export interface ComplexityValidationResult {
     isValid: boolean;
     errors: string[];
+    issues?: PasswordValidationIssue[];
 }
 
 export type PasswordCompareFn = (

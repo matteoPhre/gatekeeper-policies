@@ -11,6 +11,8 @@ import {
     type PasswordPersistenceCallbacks,
     type PasswordPolicyConfig,
     type PasswordUnicodeNormalizationForm,
+    type PasswordValidationIssue,
+    type PasswordValidationIssueCode,
 } from "./interfaces";
 import { emitAuditEvent } from "./audit";
 
@@ -59,44 +61,56 @@ export class IdentityPolicyEngine {
 
     public validateComplexity(password: string): ComplexityValidationResult {
         const errors: string[] = [];
+        const issues: PasswordValidationIssue[] = [];
         const normalizedPassword = normalizePasswordInput(password, this.config);
+        const addIssue = (code: PasswordValidationIssueCode, message: string): void => {
+            errors.push(message);
+            issues.push({ code, message });
+        };
 
         if (normalizedPassword.length < this.config.minLength) {
-            errors.push(`Password must be at least ${this.config.minLength} characters long.`);
+            addIssue(
+                "PASSWORD_TOO_SHORT",
+                `Password must be at least ${this.config.minLength} characters long.`,
+            );
         }
 
         if (normalizedPassword.length > this.config.maxLength) {
-            errors.push(`Password must be at most ${this.config.maxLength} characters long.`);
+            addIssue(
+                "PASSWORD_TOO_LONG",
+                `Password must be at most ${this.config.maxLength} characters long.`,
+            );
         }
 
         if (this.config.requireUppercase && !/[A-Z]/.test(normalizedPassword)) {
-            errors.push("Password must include at least one uppercase letter.");
+            addIssue("PASSWORD_MISSING_UPPERCASE", "Password must include at least one uppercase letter.");
         }
 
         if (this.config.requireLowercase && !/[a-z]/.test(normalizedPassword)) {
-            errors.push("Password must include at least one lowercase letter.");
+            addIssue("PASSWORD_MISSING_LOWERCASE", "Password must include at least one lowercase letter.");
         }
 
         if (this.config.requireNumbers && !/[0-9]/.test(normalizedPassword)) {
-            errors.push("Password must include at least one number.");
+            addIssue("PASSWORD_MISSING_NUMBER", "Password must include at least one number.");
         }
 
         if (
             this.config.requireSymbols
             && !/[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/.test(normalizedPassword)
         ) {
-            errors.push("Password must include at least one symbol.");
+            addIssue("PASSWORD_MISSING_SYMBOL", "Password must include at least one symbol.");
         }
 
         if (isInDenyList(normalizedPassword, this.config.denyList, this.config)) {
-            errors.push("Password contains a denied pattern.");
+            addIssue("PASSWORD_DENY_LISTED_PATTERN", "Password contains a denied pattern.");
         }
 
         if (
             this.config.preventRepeatedChars
             && hasRepeatedChars(normalizedPassword, this.config.maxRepeatedChars)
         ) {
-            errors.push(
+            addIssue(
+                "PASSWORD_REPEATED_CONSECUTIVE_CHARS",
                 `Password must not contain more than ${this.config.maxRepeatedChars} repeated consecutive characters.`,
             );
         }
@@ -105,7 +119,8 @@ export class IdentityPolicyEngine {
             this.config.preventSequentialChars
             && hasSequentialChars(normalizedPassword, this.config.maxSequentialChars)
         ) {
-            errors.push(
+            addIssue(
+                "PASSWORD_SEQUENTIAL_CHAR_RUN",
                 `Password must not contain sequential character runs of length ${this.config.maxSequentialChars} or more.`,
             );
         }
@@ -113,6 +128,7 @@ export class IdentityPolicyEngine {
         const result = {
             isValid: errors.length === 0,
             errors,
+            ...(issues.length > 0 ? { issues } : {}),
         };
 
         void emitAuditEvent(this.config.auditEventCallback, {

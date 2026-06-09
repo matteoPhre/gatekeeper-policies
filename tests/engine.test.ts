@@ -35,6 +35,12 @@ describe("IdentityPolicyEngine - complexity", () => {
             "Password must include at least one number.",
             "Password must include at least one symbol.",
         ]);
+        expect(result.issues).toEqual([
+            expect.objectContaining({ code: "PASSWORD_TOO_SHORT" }),
+            expect.objectContaining({ code: "PASSWORD_MISSING_UPPERCASE" }),
+            expect.objectContaining({ code: "PASSWORD_MISSING_NUMBER" }),
+            expect.objectContaining({ code: "PASSWORD_MISSING_SYMBOL" }),
+        ]);
     });
 
     it("accepts password that satisfies default policy", () => {
