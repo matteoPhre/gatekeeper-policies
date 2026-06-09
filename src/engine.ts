@@ -29,6 +29,7 @@ export const DEFAULT_POLICY_CONFIG: Required<PasswordPolicyConfig> = {
     preventSequentialChars: false,
     maxSequentialChars: 3,
     expiryDays: 90,
+    gracePeriodDays: 0,
     minimumPasswordAgeDays: 0,
     historyLimit: 5,
     blockSubstringsFromPreviousSecrets: false,
@@ -173,6 +174,40 @@ export class IdentityPolicyEngine {
         return Math.ceil(remainingMs / MS_PER_DAY);
     }
 
+    public isWithinGracePeriod(passwordCreatedAt: PasswordCreatedAtInput): boolean {
+        if (this.config.gracePeriodDays === 0 || !this.isPasswordExpired(passwordCreatedAt)) {
+            return false;
+        }
+
+        const createdAt = normalizePasswordCreatedAt(passwordCreatedAt);
+        const now = Date.now();
+        const ageInMs = now - createdAt.getTime();
+        const maxAgeInMs = this.config.expiryDays * MS_PER_DAY;
+        const graceWindowInMs = this.config.gracePeriodDays * MS_PER_DAY;
+        const elapsedSinceExpiryInMs = ageInMs - maxAgeInMs;
+
+        return elapsedSinceExpiryInMs <= graceWindowInMs;
+    }
+
+    public daysRemainingInGracePeriod(passwordCreatedAt: PasswordCreatedAtInput): number {
+        if (!this.isWithinGracePeriod(passwordCreatedAt)) {
+            return 0;
+        }
+
+        const createdAt = normalizePasswordCreatedAt(passwordCreatedAt);
+        const now = Date.now();
+        const ageInMs = now - createdAt.getTime();
+        const maxAgeInMs = this.config.expiryDays * MS_PER_DAY;
+        const graceWindowInMs = this.config.gracePeriodDays * MS_PER_DAY;
+        const remainingGraceInMs = maxAgeInMs + graceWindowInMs - ageInMs;
+
+        if (remainingGraceInMs <= 0) {
+            return 0;
+        }
+
+        return Math.ceil(remainingGraceInMs / MS_PER_DAY);
+    }
+
     public isMinimumPasswordAgeSatisfied(passwordCreatedAt: PasswordCreatedAtInput): boolean {
         if (this.config.minimumPasswordAgeDays === 0) {
             return true;
@@ -242,6 +277,7 @@ function resolveEngineOptions(
         preventSequentialChars: options.preventSequentialChars ?? DEFAULT_POLICY_CONFIG.preventSequentialChars,
         maxSequentialChars: options.maxSequentialChars ?? DEFAULT_POLICY_CONFIG.maxSequentialChars,
         expiryDays: options.expiryDays ?? DEFAULT_POLICY_CONFIG.expiryDays,
+        gracePeriodDays: options.gracePeriodDays ?? DEFAULT_POLICY_CONFIG.gracePeriodDays,
         minimumPasswordAgeDays:
             options.minimumPasswordAgeDays ?? DEFAULT_POLICY_CONFIG.minimumPasswordAgeDays,
         historyLimit: options.historyLimit ?? DEFAULT_POLICY_CONFIG.historyLimit,
@@ -290,6 +326,10 @@ function resolveEngineOptions(
 
     if (!Number.isInteger(config.expiryDays) || config.expiryDays < 1) {
         throw new RangeError("expiryDays must be an integer greater than 0.");
+    }
+
+    if (!Number.isInteger(config.gracePeriodDays) || config.gracePeriodDays < 0) {
+        throw new RangeError("gracePeriodDays must be a non-negative integer.");
     }
 
     if (!Number.isInteger(config.minimumPasswordAgeDays) || config.minimumPasswordAgeDays < 0) {
