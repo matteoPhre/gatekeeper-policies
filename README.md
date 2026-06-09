@@ -199,6 +199,7 @@ These examples are intended as implementation references and do not introduce fr
 - `preventSequentialChars` (default `false`)
 - `maxSequentialChars` (default `3`)
 - `expiryDays` (default `90`)
+- `expiryWarningDays` (default `0`, disables warning state before expiry)
 - `gracePeriodDays` (default `0`, disables post-expiry grace window)
 - `minimumPasswordAgeDays` (default `0`, disables minimum-age enforcement)
 - `historyLimit` (default `5`)
@@ -243,6 +244,8 @@ When `blockSubstringsFromPreviousSecrets` is enabled, the engine also checks `pe
 `isWithinGracePeriod(passwordCreatedAt)` returns whether the password is expired but still inside the configured grace window.
 
 `daysRemainingInGracePeriod(passwordCreatedAt)` returns remaining grace days (`0` when not in grace).
+
+`evaluateExpiryState(passwordCreatedAt)` returns explicit lifecycle state: `valid`, `warning`, `grace`, `expired`.
 
 ### 5. Minimum Password Age
 
@@ -298,6 +301,7 @@ They can be attached to any framework that offers compatible request/response co
 | daysUntilExpiry | `daysUntilExpiry(passwordCreatedAt: Date | string): number` | Returns remaining days before expiry, clamped to `0` when already expired. |
 | isWithinGracePeriod | `isWithinGracePeriod(passwordCreatedAt: Date | string): boolean` | Returns whether the password is expired and still within the configured grace period. |
 | daysRemainingInGracePeriod | `daysRemainingInGracePeriod(passwordCreatedAt: Date | string): number` | Returns remaining grace days, clamped to `0` when outside grace. |
+| evaluateExpiryState | `evaluateExpiryState(passwordCreatedAt: Date | string): PasswordExpiryStateResult` | Returns explicit lifecycle state (`valid`, `warning`, `grace`, `expired`) with remaining-day metrics. |
 
 ### Utility Functions
 
@@ -324,6 +328,7 @@ Important contracts are defined in `src/interfaces.ts`:
 - `PasswordHistoryComparator`
 - `PasswordHistoryComparisonStrategy`
 - `BulkPasswordHistoryCompareFn`
+- `PasswordExpiryStateResult`
 - `CreateStatusJsonExpiryMiddlewareOptions`
 - `CreateCodeSendExpiryHookOptions`
 
