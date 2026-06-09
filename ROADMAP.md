@@ -22,7 +22,7 @@ This roadmap focuses on strengthening policy controls while preserving the curre
 1. [x] Add warning window calculation (`daysUntilExpiry`).
 2. [x] Add helper APIs for grace periods after expiry.
 3. [x] Add explicit result type for expiry states (`valid`, `warning`, `expired`, `grace`).
-4. Add utilities for UTC-safe calendar-based policies.
+4. [x] Add utilities for UTC-safe calendar-based policies.
 
 ## Phase 4 - Operational and Security Features
 
