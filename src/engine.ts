@@ -1,6 +1,7 @@
 import {
     type BulkPasswordHistoryCompareFn,
     type ComplexityValidationResult,
+    type PasswordAuditEventCallback,
     type PasswordExpiryStateResult,
     type PasswordHistoryComparator,
     type PasswordHistoryComparisonStrategy,
@@ -11,6 +12,7 @@ import {
     type PasswordPolicyConfig,
     type PasswordUnicodeNormalizationForm,
 } from "./interfaces";
+import { emitAuditEvent } from "./audit";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -41,6 +43,7 @@ export const DEFAULT_POLICY_CONFIG: Required<PasswordPolicyConfig> = {
 export interface ResolvedIdentityPolicyEngineOptions
     extends Required<PasswordPolicyConfig> {
     persistence: PasswordPersistenceCallbacks;
+    auditEventCallback?: PasswordAuditEventCallback;
 }
 
 export class IdentityPolicyEngine {
@@ -107,10 +110,22 @@ export class IdentityPolicyEngine {
             );
         }
 
-        return {
+        const result = {
             isValid: errors.length === 0,
             errors,
         };
+
+        void emitAuditEvent(this.config.auditEventCallback, {
+            type: "complexity",
+            outcome: result.isValid ? "pass" : "fail",
+            details: {
+                errorCount: result.errors.length,
+                minLength: this.config.minLength,
+                maxLength: this.config.maxLength,
+            },
+        });
+
+        return result;
     }
 
     public async validateRotation(
@@ -140,15 +155,47 @@ export class IdentityPolicyEngine {
                 historyLimit: this.config.historyLimit,
             });
 
-            return !isReused;
+            const allowed = !isReused;
+
+            void emitAuditEvent(this.config.auditEventCallback, {
+                type: "rotation",
+                userId,
+                outcome: allowed ? "pass" : "fail",
+                details: {
+                    mode: "strategy",
+                    historyLimit: this.config.historyLimit,
+                },
+            });
+
+            return allowed;
         }
 
         for (const previousHash of limitedHistory) {
             const isReused = await comparator(normalizedPlainPassword, previousHash);
             if (isReused) {
+                void emitAuditEvent(this.config.auditEventCallback, {
+                    type: "rotation",
+                    userId,
+                    outcome: "fail",
+                    details: {
+                        mode: "compareFn",
+                        historyLimit: this.config.historyLimit,
+                    },
+                });
+
                 return false;
             }
         }
+
+        void emitAuditEvent(this.config.auditEventCallback, {
+            type: "rotation",
+            userId,
+            outcome: "pass",
+            details: {
+                mode: "compareFn",
+                historyLimit: this.config.historyLimit,
+            },
+        });
 
         return true;
     }
@@ -159,7 +206,17 @@ export class IdentityPolicyEngine {
         const ageInMs = now - createdAt.getTime();
         const maxAgeInMs = this.config.expiryDays * MS_PER_DAY;
 
-        return ageInMs >= maxAgeInMs;
+        const expired = ageInMs >= maxAgeInMs;
+
+        void emitAuditEvent(this.config.auditEventCallback, {
+            type: "expiry",
+            outcome: expired ? "fail" : "pass",
+            details: {
+                expiryDays: this.config.expiryDays,
+            },
+        });
+
+        return expired;
     }
 
     public daysUntilExpiry(passwordCreatedAt: PasswordCreatedAtInput): number {
@@ -173,7 +230,18 @@ export class IdentityPolicyEngine {
             return 0;
         }
 
-        return Math.ceil(remainingMs / MS_PER_DAY);
+        const days = Math.ceil(remainingMs / MS_PER_DAY);
+
+        void emitAuditEvent(this.config.auditEventCallback, {
+            type: "expiry",
+            outcome: "info",
+            details: {
+                mode: "daysUntilExpiry",
+                days,
+            },
+        });
+
+        return days;
     }
 
     public evaluateExpiryState(passwordCreatedAt: PasswordCreatedAtInput): PasswordExpiryStateResult {
@@ -181,37 +249,85 @@ export class IdentityPolicyEngine {
         const daysRemainingInGracePeriod = this.daysRemainingInGracePeriod(passwordCreatedAt);
 
         if (daysRemainingInGracePeriod > 0) {
-            return {
+            const result: PasswordExpiryStateResult = {
                 state: "grace",
                 daysUntilExpiry,
                 daysRemainingInGracePeriod,
             };
+
+            void emitAuditEvent(this.config.auditEventCallback, {
+                type: "gracePeriod",
+                outcome: "info",
+                details: {
+                    state: result.state,
+                    daysUntilExpiry: result.daysUntilExpiry,
+                    daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
+                },
+            });
+
+            return result;
         }
 
         if (this.isPasswordExpired(passwordCreatedAt)) {
-            return {
+            const result: PasswordExpiryStateResult = {
                 state: "expired",
                 daysUntilExpiry,
                 daysRemainingInGracePeriod,
             };
+
+            void emitAuditEvent(this.config.auditEventCallback, {
+                type: "gracePeriod",
+                outcome: "info",
+                details: {
+                    state: result.state,
+                    daysUntilExpiry: result.daysUntilExpiry,
+                    daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
+                },
+            });
+
+            return result;
         }
 
         if (
             this.config.expiryWarningDays > 0
             && daysUntilExpiry <= this.config.expiryWarningDays
         ) {
-            return {
+            const result: PasswordExpiryStateResult = {
                 state: "warning",
                 daysUntilExpiry,
                 daysRemainingInGracePeriod,
             };
+
+            void emitAuditEvent(this.config.auditEventCallback, {
+                type: "expiry",
+                outcome: "info",
+                details: {
+                    state: result.state,
+                    daysUntilExpiry: result.daysUntilExpiry,
+                    daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
+                },
+            });
+
+            return result;
         }
 
-        return {
+        const result: PasswordExpiryStateResult = {
             state: "valid",
             daysUntilExpiry,
             daysRemainingInGracePeriod,
         };
+
+        void emitAuditEvent(this.config.auditEventCallback, {
+            type: "expiry",
+            outcome: "pass",
+            details: {
+                state: result.state,
+                daysUntilExpiry: result.daysUntilExpiry,
+                daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
+            },
+        });
+
+        return result;
     }
 
     public isWithinGracePeriod(passwordCreatedAt: PasswordCreatedAtInput): boolean {
@@ -258,7 +374,17 @@ export class IdentityPolicyEngine {
         const ageInMs = now - createdAt.getTime();
         const minimumAgeInMs = this.config.minimumPasswordAgeDays * MS_PER_DAY;
 
-        return ageInMs >= minimumAgeInMs;
+        const satisfied = ageInMs >= minimumAgeInMs;
+
+        void emitAuditEvent(this.config.auditEventCallback, {
+            type: "minimumPasswordAge",
+            outcome: satisfied ? "pass" : "fail",
+            details: {
+                minimumPasswordAgeDays: this.config.minimumPasswordAgeDays,
+            },
+        });
+
+        return satisfied;
     }
 }
 
@@ -362,6 +488,7 @@ function resolveEngineOptions(
             options.minPreviousSecretSubstringLength
             ?? DEFAULT_POLICY_CONFIG.minPreviousSecretSubstringLength,
         persistence: options.persistence,
+        auditEventCallback: options.auditEventCallback,
     };
 
     if (!Number.isInteger(config.minLength) || config.minLength < 1) {

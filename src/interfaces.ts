@@ -40,8 +40,26 @@ export interface PasswordPersistenceCallbacks {
     getPreviousPasswordSubstrings?(userId: string): Promise<string[]>;
 }
 
+export type PasswordAuditEventType =
+    | "complexity"
+    | "rotation"
+    | "expiry"
+    | "minimumPasswordAge"
+    | "gracePeriod"
+    | "utcCalendar";
+
+export interface PasswordAuditEvent {
+    type: PasswordAuditEventType;
+    userId?: string;
+    outcome: "pass" | "fail" | "info";
+    details?: Record<string, unknown>;
+}
+
+export type PasswordAuditEventCallback = (event: PasswordAuditEvent) => Promise<void> | void;
+
 export interface IdentityPolicyEngineOptions extends PasswordPolicyConfig {
     persistence: PasswordPersistenceCallbacks;
+    auditEventCallback?: PasswordAuditEventCallback;
 }
 
 export interface ComplexityValidationResult {
