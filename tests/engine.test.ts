@@ -406,6 +406,56 @@ describe("IdentityPolicyEngine - expiry", () => {
         expect(remainingDays).toBe(0);
         vi.useRealTimers();
     });
+
+    it("detects when an expired password is still inside grace period", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+        const engine = new IdentityPolicyEngine({
+            expiryDays: 90,
+            gracePeriodDays: 7,
+            persistence: createPersistenceMock(),
+        });
+
+        const inGrace = engine.isWithinGracePeriod("2026-03-06T00:00:00.000Z");
+
+        expect(inGrace).toBe(true);
+        vi.useRealTimers();
+    });
+
+    it("returns remaining days in grace period", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+        const engine = new IdentityPolicyEngine({
+            expiryDays: 90,
+            gracePeriodDays: 7,
+            persistence: createPersistenceMock(),
+        });
+
+        const remainingGraceDays = engine.daysRemainingInGracePeriod("2026-03-06T00:00:00.000Z");
+
+        expect(remainingGraceDays).toBe(6);
+        vi.useRealTimers();
+    });
+
+    it("returns false/zero outside grace period", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+        const engine = new IdentityPolicyEngine({
+            expiryDays: 90,
+            gracePeriodDays: 7,
+            persistence: createPersistenceMock(),
+        });
+
+        const inGrace = engine.isWithinGracePeriod("2026-02-26T00:00:00.000Z");
+        const remainingGraceDays = engine.daysRemainingInGracePeriod("2026-02-26T00:00:00.000Z");
+
+        expect(inGrace).toBe(false);
+        expect(remainingGraceDays).toBe(0);
+        vi.useRealTimers();
+    });
 });
 
 describe("normalizePasswordCreatedAt", () => {
@@ -456,5 +506,14 @@ describe("IdentityPolicyEngine - config validation", () => {
         }).toThrow(
             "getPreviousPasswordSubstrings persistence callback is required when blockSubstringsFromPreviousSecrets is enabled.",
         );
+    });
+
+    it("throws when gracePeriodDays is negative", () => {
+        expect(() => {
+            new IdentityPolicyEngine({
+                gracePeriodDays: -1,
+                persistence: createPersistenceMock(),
+            });
+        }).toThrow("gracePeriodDays must be a non-negative integer.");
     });
 });

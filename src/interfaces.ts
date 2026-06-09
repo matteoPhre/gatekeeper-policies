@@ -18,6 +18,7 @@ export interface PasswordPolicyConfig {
     preventSequentialChars?: boolean;
     maxSequentialChars?: number;
     expiryDays?: number;
+    gracePeriodDays?: number;
     minimumPasswordAgeDays?: number;
     historyLimit?: number;
     blockSubstringsFromPreviousSecrets?: boolean;

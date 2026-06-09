@@ -20,7 +20,7 @@ This roadmap focuses on strengthening policy controls while preserving the curre
 ## Phase 3 - Expiry Lifecycle Extensions
 
 1. [x] Add warning window calculation (`daysUntilExpiry`).
-2. Add helper APIs for grace periods after expiry.
+2. [x] Add helper APIs for grace periods after expiry.
 3. Add explicit result type for expiry states (`valid`, `warning`, `expired`, `grace`).
 4. Add utilities for UTC-safe calendar-based policies.
 

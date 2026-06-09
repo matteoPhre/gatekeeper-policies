@@ -199,6 +199,7 @@ These examples are intended as implementation references and do not introduce fr
 - `preventSequentialChars` (default `false`)
 - `maxSequentialChars` (default `3`)
 - `expiryDays` (default `90`)
+- `gracePeriodDays` (default `0`, disables post-expiry grace window)
 - `minimumPasswordAgeDays` (default `0`, disables minimum-age enforcement)
 - `historyLimit` (default `5`)
 - `blockSubstringsFromPreviousSecrets` (default `false`)
@@ -238,6 +239,10 @@ When `blockSubstringsFromPreviousSecrets` is enabled, the engine also checks `pe
 `isPasswordExpired(passwordCreatedAt)` accepts `Date | string` and evaluates expiration with `expiryDays`.
 
 `daysUntilExpiry(passwordCreatedAt)` accepts `Date | string` and returns remaining days before expiry (`0` when expired).
+
+`isWithinGracePeriod(passwordCreatedAt)` returns whether the password is expired but still inside the configured grace window.
+
+`daysRemainingInGracePeriod(passwordCreatedAt)` returns remaining grace days (`0` when not in grace).
 
 ### 5. Minimum Password Age
 
@@ -291,6 +296,8 @@ They can be attached to any framework that offers compatible request/response co
 | isMinimumPasswordAgeSatisfied | `isMinimumPasswordAgeSatisfied(passwordCreatedAt: Date | string): boolean` | Enforces the optional minimum-age requirement before a password can be changed. |
 | isPasswordExpired | `isPasswordExpired(passwordCreatedAt: Date | string): boolean` | Checks whether password age exceeds configured expiry window. |
 | daysUntilExpiry | `daysUntilExpiry(passwordCreatedAt: Date | string): number` | Returns remaining days before expiry, clamped to `0` when already expired. |
+| isWithinGracePeriod | `isWithinGracePeriod(passwordCreatedAt: Date | string): boolean` | Returns whether the password is expired and still within the configured grace period. |
+| daysRemainingInGracePeriod | `daysRemainingInGracePeriod(passwordCreatedAt: Date | string): number` | Returns remaining grace days, clamped to `0` when outside grace. |
 
 ### Utility Functions
 
