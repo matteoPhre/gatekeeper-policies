@@ -26,8 +26,8 @@ This roadmap focuses on strengthening policy controls while preserving the curre
 
 ## Phase 4 - Operational and Security Features
 
-1. Add optional audit event callbacks for compliance logging.
-2. Add structured error codes across all validations.
+1. [x] Add optional audit event callbacks for compliance logging.
+2. [x] Add structured error codes across validations.
 3. Add constant-time utility helpers for safer comparisons when needed.
 4. Add threat-focused examples for brute-force and credential-stuffing controls.
 

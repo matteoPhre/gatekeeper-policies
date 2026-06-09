@@ -208,14 +208,19 @@ These examples are intended as implementation references and do not introduce fr
 - `persistence.getPasswordHistory(userId)`
 - `persistence.saveNewPassword(userId, newHash)`
 - `persistence.getPreviousPasswordSubstrings(userId)` when substring blocking is enabled
+- `auditEventCallback(event)` for compliance logging and observability hooks
+
+`auditEventCallback` is optional and fire-and-forget: the engine clones each event before invoking the callback and ignores callback failures so validation behavior stays deterministic.
 
 ### 2. Complexity Validation
 
 `validateComplexity(password)` returns:
 
 ```ts
-{ isValid: boolean; errors: string[] }
+{ isValid: boolean; errors: string[]; issues?: Array<{ code: string; message: string }> }
 ```
+
+`errors` stays for human-readable output; `issues` adds stable machine-readable codes for host-side mapping and logging.
 
 ### 3. Rotation Validation
 
@@ -270,6 +275,9 @@ const engine = new IdentityPolicyEngine({
 			// persist in your store
 		},
 	},
+	auditEventCallback: async (event) => {
+		console.log(`[audit] ${event.type}:${event.outcome}`, event.details ?? {});
+	},
 });
 
 const complexity = engine.validateComplexity("StrongPassword#2026");
@@ -303,6 +311,8 @@ They can be attached to any framework that offers compatible request/response co
 | daysRemainingInGracePeriod | `daysRemainingInGracePeriod(passwordCreatedAt: Date | string): number` | Returns remaining grace days, clamped to `0` when outside grace. |
 | evaluateExpiryState | `evaluateExpiryState(passwordCreatedAt: Date | string): PasswordExpiryStateResult` | Returns explicit lifecycle state (`valid`, `warning`, `grace`, `expired`) with remaining-day metrics. |
 
+Audit events are emitted with these `type` values: `complexity`, `rotation`, `expiry`, `minimumPasswordAge`, and `gracePeriod`.
+
 ### Utility Functions
 
 | Function | Signature | Description |
@@ -327,6 +337,8 @@ Important contracts are defined in `src/interfaces.ts`:
 - `PasswordPolicyConfig`
 - `PasswordPersistenceCallbacks`
 - `IdentityPolicyEngineOptions`
+- `PasswordAuditEvent`
+- `PasswordAuditEventCallback`
 - `PasswordCompareFn`
 - `PasswordHistoryComparator`
 - `PasswordHistoryComparisonStrategy`

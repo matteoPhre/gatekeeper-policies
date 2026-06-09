@@ -1,6 +1,7 @@
 import {
     type BulkPasswordHistoryCompareFn,
     type ComplexityValidationResult,
+    type PasswordAuditEventCallback,
     type PasswordExpiryStateResult,
     type PasswordHistoryComparator,
     type PasswordHistoryComparisonStrategy,
@@ -10,7 +11,10 @@ import {
     type PasswordPersistenceCallbacks,
     type PasswordPolicyConfig,
     type PasswordUnicodeNormalizationForm,
+    type PasswordValidationIssue,
+    type PasswordValidationIssueCode,
 } from "./interfaces";
+import { emitAuditEvent } from "./audit";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -41,6 +45,7 @@ export const DEFAULT_POLICY_CONFIG: Required<PasswordPolicyConfig> = {
 export interface ResolvedIdentityPolicyEngineOptions
     extends Required<PasswordPolicyConfig> {
     persistence: PasswordPersistenceCallbacks;
+    auditEventCallback?: PasswordAuditEventCallback;
 }
 
 export class IdentityPolicyEngine {
@@ -56,44 +61,56 @@ export class IdentityPolicyEngine {
 
     public validateComplexity(password: string): ComplexityValidationResult {
         const errors: string[] = [];
+        const issues: PasswordValidationIssue[] = [];
         const normalizedPassword = normalizePasswordInput(password, this.config);
+        const addIssue = (code: PasswordValidationIssueCode, message: string): void => {
+            errors.push(message);
+            issues.push({ code, message });
+        };
 
         if (normalizedPassword.length < this.config.minLength) {
-            errors.push(`Password must be at least ${this.config.minLength} characters long.`);
+            addIssue(
+                "PASSWORD_TOO_SHORT",
+                `Password must be at least ${this.config.minLength} characters long.`,
+            );
         }
 
         if (normalizedPassword.length > this.config.maxLength) {
-            errors.push(`Password must be at most ${this.config.maxLength} characters long.`);
+            addIssue(
+                "PASSWORD_TOO_LONG",
+                `Password must be at most ${this.config.maxLength} characters long.`,
+            );
         }
 
         if (this.config.requireUppercase && !/[A-Z]/.test(normalizedPassword)) {
-            errors.push("Password must include at least one uppercase letter.");
+            addIssue("PASSWORD_MISSING_UPPERCASE", "Password must include at least one uppercase letter.");
         }
 
         if (this.config.requireLowercase && !/[a-z]/.test(normalizedPassword)) {
-            errors.push("Password must include at least one lowercase letter.");
+            addIssue("PASSWORD_MISSING_LOWERCASE", "Password must include at least one lowercase letter.");
         }
 
         if (this.config.requireNumbers && !/[0-9]/.test(normalizedPassword)) {
-            errors.push("Password must include at least one number.");
+            addIssue("PASSWORD_MISSING_NUMBER", "Password must include at least one number.");
         }
 
         if (
             this.config.requireSymbols
             && !/[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/.test(normalizedPassword)
         ) {
-            errors.push("Password must include at least one symbol.");
+            addIssue("PASSWORD_MISSING_SYMBOL", "Password must include at least one symbol.");
         }
 
         if (isInDenyList(normalizedPassword, this.config.denyList, this.config)) {
-            errors.push("Password contains a denied pattern.");
+            addIssue("PASSWORD_DENY_LISTED_PATTERN", "Password contains a denied pattern.");
         }
 
         if (
             this.config.preventRepeatedChars
             && hasRepeatedChars(normalizedPassword, this.config.maxRepeatedChars)
         ) {
-            errors.push(
+            addIssue(
+                "PASSWORD_REPEATED_CONSECUTIVE_CHARS",
                 `Password must not contain more than ${this.config.maxRepeatedChars} repeated consecutive characters.`,
             );
         }
@@ -102,15 +119,29 @@ export class IdentityPolicyEngine {
             this.config.preventSequentialChars
             && hasSequentialChars(normalizedPassword, this.config.maxSequentialChars)
         ) {
-            errors.push(
+            addIssue(
+                "PASSWORD_SEQUENTIAL_CHAR_RUN",
                 `Password must not contain sequential character runs of length ${this.config.maxSequentialChars} or more.`,
             );
         }
 
-        return {
+        const result = {
             isValid: errors.length === 0,
             errors,
+            ...(issues.length > 0 ? { issues } : {}),
         };
+
+        void emitAuditEvent(this.config.auditEventCallback, {
+            type: "complexity",
+            outcome: result.isValid ? "pass" : "fail",
+            details: {
+                errorCount: result.errors.length,
+                minLength: this.config.minLength,
+                maxLength: this.config.maxLength,
+            },
+        });
+
+        return result;
     }
 
     public async validateRotation(
@@ -140,15 +171,47 @@ export class IdentityPolicyEngine {
                 historyLimit: this.config.historyLimit,
             });
 
-            return !isReused;
+            const allowed = !isReused;
+
+            void emitAuditEvent(this.config.auditEventCallback, {
+                type: "rotation",
+                userId,
+                outcome: allowed ? "pass" : "fail",
+                details: {
+                    mode: "strategy",
+                    historyLimit: this.config.historyLimit,
+                },
+            });
+
+            return allowed;
         }
 
         for (const previousHash of limitedHistory) {
             const isReused = await comparator(normalizedPlainPassword, previousHash);
             if (isReused) {
+                void emitAuditEvent(this.config.auditEventCallback, {
+                    type: "rotation",
+                    userId,
+                    outcome: "fail",
+                    details: {
+                        mode: "compareFn",
+                        historyLimit: this.config.historyLimit,
+                    },
+                });
+
                 return false;
             }
         }
+
+        void emitAuditEvent(this.config.auditEventCallback, {
+            type: "rotation",
+            userId,
+            outcome: "pass",
+            details: {
+                mode: "compareFn",
+                historyLimit: this.config.historyLimit,
+            },
+        });
 
         return true;
     }
@@ -159,7 +222,17 @@ export class IdentityPolicyEngine {
         const ageInMs = now - createdAt.getTime();
         const maxAgeInMs = this.config.expiryDays * MS_PER_DAY;
 
-        return ageInMs >= maxAgeInMs;
+        const expired = ageInMs >= maxAgeInMs;
+
+        void emitAuditEvent(this.config.auditEventCallback, {
+            type: "expiry",
+            outcome: expired ? "fail" : "pass",
+            details: {
+                expiryDays: this.config.expiryDays,
+            },
+        });
+
+        return expired;
     }
 
     public daysUntilExpiry(passwordCreatedAt: PasswordCreatedAtInput): number {
@@ -173,7 +246,18 @@ export class IdentityPolicyEngine {
             return 0;
         }
 
-        return Math.ceil(remainingMs / MS_PER_DAY);
+        const days = Math.ceil(remainingMs / MS_PER_DAY);
+
+        void emitAuditEvent(this.config.auditEventCallback, {
+            type: "expiry",
+            outcome: "info",
+            details: {
+                mode: "daysUntilExpiry",
+                days,
+            },
+        });
+
+        return days;
     }
 
     public evaluateExpiryState(passwordCreatedAt: PasswordCreatedAtInput): PasswordExpiryStateResult {
@@ -181,37 +265,85 @@ export class IdentityPolicyEngine {
         const daysRemainingInGracePeriod = this.daysRemainingInGracePeriod(passwordCreatedAt);
 
         if (daysRemainingInGracePeriod > 0) {
-            return {
+            const result: PasswordExpiryStateResult = {
                 state: "grace",
                 daysUntilExpiry,
                 daysRemainingInGracePeriod,
             };
+
+            void emitAuditEvent(this.config.auditEventCallback, {
+                type: "gracePeriod",
+                outcome: "info",
+                details: {
+                    state: result.state,
+                    daysUntilExpiry: result.daysUntilExpiry,
+                    daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
+                },
+            });
+
+            return result;
         }
 
         if (this.isPasswordExpired(passwordCreatedAt)) {
-            return {
+            const result: PasswordExpiryStateResult = {
                 state: "expired",
                 daysUntilExpiry,
                 daysRemainingInGracePeriod,
             };
+
+            void emitAuditEvent(this.config.auditEventCallback, {
+                type: "gracePeriod",
+                outcome: "info",
+                details: {
+                    state: result.state,
+                    daysUntilExpiry: result.daysUntilExpiry,
+                    daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
+                },
+            });
+
+            return result;
         }
 
         if (
             this.config.expiryWarningDays > 0
             && daysUntilExpiry <= this.config.expiryWarningDays
         ) {
-            return {
+            const result: PasswordExpiryStateResult = {
                 state: "warning",
                 daysUntilExpiry,
                 daysRemainingInGracePeriod,
             };
+
+            void emitAuditEvent(this.config.auditEventCallback, {
+                type: "expiry",
+                outcome: "info",
+                details: {
+                    state: result.state,
+                    daysUntilExpiry: result.daysUntilExpiry,
+                    daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
+                },
+            });
+
+            return result;
         }
 
-        return {
+        const result: PasswordExpiryStateResult = {
             state: "valid",
             daysUntilExpiry,
             daysRemainingInGracePeriod,
         };
+
+        void emitAuditEvent(this.config.auditEventCallback, {
+            type: "expiry",
+            outcome: "pass",
+            details: {
+                state: result.state,
+                daysUntilExpiry: result.daysUntilExpiry,
+                daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
+            },
+        });
+
+        return result;
     }
 
     public isWithinGracePeriod(passwordCreatedAt: PasswordCreatedAtInput): boolean {
@@ -258,7 +390,17 @@ export class IdentityPolicyEngine {
         const ageInMs = now - createdAt.getTime();
         const minimumAgeInMs = this.config.minimumPasswordAgeDays * MS_PER_DAY;
 
-        return ageInMs >= minimumAgeInMs;
+        const satisfied = ageInMs >= minimumAgeInMs;
+
+        void emitAuditEvent(this.config.auditEventCallback, {
+            type: "minimumPasswordAge",
+            outcome: satisfied ? "pass" : "fail",
+            details: {
+                minimumPasswordAgeDays: this.config.minimumPasswordAgeDays,
+            },
+        });
+
+        return satisfied;
     }
 }
 
@@ -362,6 +504,7 @@ function resolveEngineOptions(
             options.minPreviousSecretSubstringLength
             ?? DEFAULT_POLICY_CONFIG.minPreviousSecretSubstringLength,
         persistence: options.persistence,
+        auditEventCallback: options.auditEventCallback,
     };
 
     if (!Number.isInteger(config.minLength) || config.minLength < 1) {

@@ -7,7 +7,7 @@ import {
     normalizePasswordCreatedAt,
     toUtcStartOfDay,
 } from "../src/engine";
-import type { PasswordPersistenceCallbacks } from "../src/interfaces";
+import type { PasswordAuditEvent, PasswordPersistenceCallbacks } from "../src/interfaces";
 
 function createPersistenceMock(
     history: string[] = [],
@@ -34,6 +34,12 @@ describe("IdentityPolicyEngine - complexity", () => {
             "Password must include at least one uppercase letter.",
             "Password must include at least one number.",
             "Password must include at least one symbol.",
+        ]);
+        expect(result.issues).toEqual([
+            expect.objectContaining({ code: "PASSWORD_TOO_SHORT" }),
+            expect.objectContaining({ code: "PASSWORD_MISSING_UPPERCASE" }),
+            expect.objectContaining({ code: "PASSWORD_MISSING_NUMBER" }),
+            expect.objectContaining({ code: "PASSWORD_MISSING_SYMBOL" }),
         ]);
     });
 
@@ -190,6 +196,37 @@ describe("IdentityPolicyEngine - complexity", () => {
 
         expect(result.isValid).toBe(false);
         expect(result.errors).toContain("Password contains a denied pattern.");
+    });
+
+    it("emits audit events without affecting validation results", () => {
+        const auditEvents: PasswordAuditEvent[] = [];
+        const engine = new IdentityPolicyEngine({
+            auditEventCallback: (event) => {
+                auditEvents.push(event);
+            },
+            persistence: createPersistenceMock(),
+        });
+
+        const result = engine.validateComplexity("short");
+
+        expect(result.isValid).toBe(false);
+        expect(auditEvents).toEqual([
+            expect.objectContaining({
+                type: "complexity",
+                outcome: "fail",
+            }),
+        ]);
+    });
+
+    it("swallows audit callback failures", () => {
+        const engine = new IdentityPolicyEngine({
+            auditEventCallback: () => {
+                throw new Error("audit failed");
+            },
+            persistence: createPersistenceMock(),
+        });
+
+        expect(() => engine.validateComplexity("short")).not.toThrow();
     });
 });
 
