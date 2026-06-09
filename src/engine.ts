@@ -293,6 +293,39 @@ export function createBulkPasswordHistoryComparisonStrategy(
     };
 }
 
+export function toUtcStartOfDay(value: PasswordCreatedAtInput): Date {
+    const normalized = normalizePasswordCreatedAt(value);
+
+    return new Date(Date.UTC(
+        normalized.getUTCFullYear(),
+        normalized.getUTCMonth(),
+        normalized.getUTCDate(),
+    ));
+}
+
+export function addUtcCalendarDays(value: PasswordCreatedAtInput, days: number): Date {
+    if (!Number.isInteger(days)) {
+        throw new RangeError("days must be an integer.");
+    }
+
+    const utcStart = toUtcStartOfDay(value);
+    return new Date(Date.UTC(
+        utcStart.getUTCFullYear(),
+        utcStart.getUTCMonth(),
+        utcStart.getUTCDate() + days,
+    ));
+}
+
+export function daysBetweenUtcCalendarDates(
+    start: PasswordCreatedAtInput,
+    end: PasswordCreatedAtInput,
+): number {
+    const utcStart = toUtcStartOfDay(start).getTime();
+    const utcEnd = toUtcStartOfDay(end).getTime();
+
+    return Math.round((utcEnd - utcStart) / MS_PER_DAY);
+}
+
 function resolveEngineOptions(
     options: IdentityPolicyEngineOptions,
 ): ResolvedIdentityPolicyEngineOptions {

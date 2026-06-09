@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+    addUtcCalendarDays,
     createBulkPasswordHistoryComparisonStrategy,
+    daysBetweenUtcCalendarDates,
     IdentityPolicyEngine,
     normalizePasswordCreatedAt,
+    toUtcStartOfDay,
 } from "../src/engine";
 import type { PasswordPersistenceCallbacks } from "../src/interfaces";
 
@@ -555,6 +558,35 @@ describe("normalizePasswordCreatedAt", () => {
 
         expect(d1.toISOString()).toBe("2026-01-01T00:00:00.000Z");
         expect(d2.toISOString()).toBe("2026-01-01T00:00:00.000Z");
+    });
+});
+
+describe("UTC calendar utilities", () => {
+    it("normalizes to UTC start of day", () => {
+        const value = toUtcStartOfDay("2026-06-09T15:34:00.000Z");
+
+        expect(value.toISOString()).toBe("2026-06-09T00:00:00.000Z");
+    });
+
+    it("adds calendar days in UTC", () => {
+        const value = addUtcCalendarDays("2026-06-09T15:34:00.000Z", 5);
+
+        expect(value.toISOString()).toBe("2026-06-14T00:00:00.000Z");
+    });
+
+    it("computes day differences with UTC calendar semantics", () => {
+        const diff = daysBetweenUtcCalendarDates(
+            "2026-06-09T23:59:59.000Z",
+            "2026-06-14T00:00:01.000Z",
+        );
+
+        expect(diff).toBe(5);
+    });
+
+    it("throws when addUtcCalendarDays gets non-integer days", () => {
+        expect(() => addUtcCalendarDays("2026-06-09T15:34:00.000Z", 1.2)).toThrow(
+            "days must be an integer.",
+        );
     });
 });
 

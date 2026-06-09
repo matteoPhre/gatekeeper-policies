@@ -308,6 +308,9 @@ They can be attached to any framework that offers compatible request/response co
 | Function | Signature | Description |
 | --- | --- | --- |
 | normalizePasswordCreatedAt | `normalizePasswordCreatedAt(passwordCreatedAt: Date | string): Date` | Normalizes and validates date input used by expiry logic. |
+| toUtcStartOfDay | `toUtcStartOfDay(value: Date | string): Date` | Normalizes a timestamp to UTC midnight (`00:00:00.000Z`) for calendar-safe policy checks. |
+| addUtcCalendarDays | `addUtcCalendarDays(value: Date | string, days: number): Date` | Adds whole calendar days in UTC semantics, avoiding local timezone drift. |
+| daysBetweenUtcCalendarDates | `daysBetweenUtcCalendarDates(start: Date | string, end: Date | string): number` | Returns day difference between UTC-normalized calendar dates. |
 | evaluatePasswordExpiry | `evaluatePasswordExpiry(request, options): Promise<{ expired: boolean; subject: PasswordSubjectContext; expiredResult?: TExpiredResult }>` | Evaluates expiry in a transport-agnostic pipeline and invokes `onExpired` when needed. |
 
 ### Transport Factories
