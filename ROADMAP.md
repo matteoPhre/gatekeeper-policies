@@ -45,6 +45,13 @@ This roadmap focuses on strengthening policy controls while preserving the curre
 3. Add CI matrix for multiple Node LTS versions.
 4. Add semantic-release workflow and changelog automation.
 
+## Phase 7 - Advanced Validation and Security Integrations
+
+1. Add high-density structured complexity errors (`code` + `meta`) to support host-driven i18n mapping without localization coupling.
+2. Add optional pluggable entropy verification hooks (`entropyValidator`) for async strength analysis without bundling external analyzers.
+3. Add zero-knowledge compromised password audit helpers (k-Anonymity flow) with host-managed network calls for breach checks.
+4. Enforce deterministic normalization sequencing so trim/unicode normalization always run before length/composition metrics.
+
 ## Compatibility Commitment
 
 All future changes should preserve:
