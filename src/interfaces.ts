@@ -18,10 +18,20 @@ export interface PasswordPolicyConfig {
     preventSequentialChars?: boolean;
     maxSequentialChars?: number;
     expiryDays?: number;
+    expiryWarningDays?: number;
+    gracePeriodDays?: number;
     minimumPasswordAgeDays?: number;
     historyLimit?: number;
     blockSubstringsFromPreviousSecrets?: boolean;
     minPreviousSecretSubstringLength?: number;
+}
+
+export type PasswordExpiryState = "valid" | "warning" | "expired" | "grace";
+
+export interface PasswordExpiryStateResult {
+    state: PasswordExpiryState;
+    daysUntilExpiry: number;
+    daysRemainingInGracePeriod: number;
 }
 
 export interface PasswordPersistenceCallbacks {

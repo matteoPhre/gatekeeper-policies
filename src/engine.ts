@@ -1,6 +1,7 @@
 import {
     type BulkPasswordHistoryCompareFn,
     type ComplexityValidationResult,
+    type PasswordExpiryStateResult,
     type PasswordHistoryComparator,
     type PasswordHistoryComparisonStrategy,
     type IdentityPolicyEngineOptions,
@@ -29,6 +30,8 @@ export const DEFAULT_POLICY_CONFIG: Required<PasswordPolicyConfig> = {
     preventSequentialChars: false,
     maxSequentialChars: 3,
     expiryDays: 90,
+    expiryWarningDays: 0,
+    gracePeriodDays: 0,
     minimumPasswordAgeDays: 0,
     historyLimit: 5,
     blockSubstringsFromPreviousSecrets: false,
@@ -159,6 +162,92 @@ export class IdentityPolicyEngine {
         return ageInMs >= maxAgeInMs;
     }
 
+    public daysUntilExpiry(passwordCreatedAt: PasswordCreatedAtInput): number {
+        const createdAt = normalizePasswordCreatedAt(passwordCreatedAt);
+        const now = Date.now();
+        const ageInMs = now - createdAt.getTime();
+        const maxAgeInMs = this.config.expiryDays * MS_PER_DAY;
+        const remainingMs = maxAgeInMs - ageInMs;
+
+        if (remainingMs <= 0) {
+            return 0;
+        }
+
+        return Math.ceil(remainingMs / MS_PER_DAY);
+    }
+
+    public evaluateExpiryState(passwordCreatedAt: PasswordCreatedAtInput): PasswordExpiryStateResult {
+        const daysUntilExpiry = this.daysUntilExpiry(passwordCreatedAt);
+        const daysRemainingInGracePeriod = this.daysRemainingInGracePeriod(passwordCreatedAt);
+
+        if (daysRemainingInGracePeriod > 0) {
+            return {
+                state: "grace",
+                daysUntilExpiry,
+                daysRemainingInGracePeriod,
+            };
+        }
+
+        if (this.isPasswordExpired(passwordCreatedAt)) {
+            return {
+                state: "expired",
+                daysUntilExpiry,
+                daysRemainingInGracePeriod,
+            };
+        }
+
+        if (
+            this.config.expiryWarningDays > 0
+            && daysUntilExpiry <= this.config.expiryWarningDays
+        ) {
+            return {
+                state: "warning",
+                daysUntilExpiry,
+                daysRemainingInGracePeriod,
+            };
+        }
+
+        return {
+            state: "valid",
+            daysUntilExpiry,
+            daysRemainingInGracePeriod,
+        };
+    }
+
+    public isWithinGracePeriod(passwordCreatedAt: PasswordCreatedAtInput): boolean {
+        if (this.config.gracePeriodDays === 0 || !this.isPasswordExpired(passwordCreatedAt)) {
+            return false;
+        }
+
+        const createdAt = normalizePasswordCreatedAt(passwordCreatedAt);
+        const now = Date.now();
+        const ageInMs = now - createdAt.getTime();
+        const maxAgeInMs = this.config.expiryDays * MS_PER_DAY;
+        const graceWindowInMs = this.config.gracePeriodDays * MS_PER_DAY;
+        const elapsedSinceExpiryInMs = ageInMs - maxAgeInMs;
+
+        return elapsedSinceExpiryInMs <= graceWindowInMs;
+    }
+
+    public daysRemainingInGracePeriod(passwordCreatedAt: PasswordCreatedAtInput): number {
+        if (!this.isWithinGracePeriod(passwordCreatedAt)) {
+            return 0;
+        }
+
+        const createdAt = normalizePasswordCreatedAt(passwordCreatedAt);
+        const now = Date.now();
+        const ageInMs = now - createdAt.getTime();
+        const maxAgeInMs = this.config.expiryDays * MS_PER_DAY;
+        const graceWindowInMs = this.config.gracePeriodDays * MS_PER_DAY;
+        const remainingGraceInMs = maxAgeInMs + graceWindowInMs - ageInMs;
+
+        if (remainingGraceInMs <= 0) {
+            return 0;
+        }
+
+        return Math.ceil(remainingGraceInMs / MS_PER_DAY);
+    }
+
     public isMinimumPasswordAgeSatisfied(passwordCreatedAt: PasswordCreatedAtInput): boolean {
         if (this.config.minimumPasswordAgeDays === 0) {
             return true;
@@ -204,6 +293,39 @@ export function createBulkPasswordHistoryComparisonStrategy(
     };
 }
 
+export function toUtcStartOfDay(value: PasswordCreatedAtInput): Date {
+    const normalized = normalizePasswordCreatedAt(value);
+
+    return new Date(Date.UTC(
+        normalized.getUTCFullYear(),
+        normalized.getUTCMonth(),
+        normalized.getUTCDate(),
+    ));
+}
+
+export function addUtcCalendarDays(value: PasswordCreatedAtInput, days: number): Date {
+    if (!Number.isInteger(days)) {
+        throw new RangeError("days must be an integer.");
+    }
+
+    const utcStart = toUtcStartOfDay(value);
+    return new Date(Date.UTC(
+        utcStart.getUTCFullYear(),
+        utcStart.getUTCMonth(),
+        utcStart.getUTCDate() + days,
+    ));
+}
+
+export function daysBetweenUtcCalendarDates(
+    start: PasswordCreatedAtInput,
+    end: PasswordCreatedAtInput,
+): number {
+    const utcStart = toUtcStartOfDay(start).getTime();
+    const utcEnd = toUtcStartOfDay(end).getTime();
+
+    return Math.round((utcEnd - utcStart) / MS_PER_DAY);
+}
+
 function resolveEngineOptions(
     options: IdentityPolicyEngineOptions,
 ): ResolvedIdentityPolicyEngineOptions {
@@ -228,6 +350,8 @@ function resolveEngineOptions(
         preventSequentialChars: options.preventSequentialChars ?? DEFAULT_POLICY_CONFIG.preventSequentialChars,
         maxSequentialChars: options.maxSequentialChars ?? DEFAULT_POLICY_CONFIG.maxSequentialChars,
         expiryDays: options.expiryDays ?? DEFAULT_POLICY_CONFIG.expiryDays,
+        expiryWarningDays: options.expiryWarningDays ?? DEFAULT_POLICY_CONFIG.expiryWarningDays,
+        gracePeriodDays: options.gracePeriodDays ?? DEFAULT_POLICY_CONFIG.gracePeriodDays,
         minimumPasswordAgeDays:
             options.minimumPasswordAgeDays ?? DEFAULT_POLICY_CONFIG.minimumPasswordAgeDays,
         historyLimit: options.historyLimit ?? DEFAULT_POLICY_CONFIG.historyLimit,
@@ -276,6 +400,14 @@ function resolveEngineOptions(
 
     if (!Number.isInteger(config.expiryDays) || config.expiryDays < 1) {
         throw new RangeError("expiryDays must be an integer greater than 0.");
+    }
+
+    if (!Number.isInteger(config.expiryWarningDays) || config.expiryWarningDays < 0) {
+        throw new RangeError("expiryWarningDays must be a non-negative integer.");
+    }
+
+    if (!Number.isInteger(config.gracePeriodDays) || config.gracePeriodDays < 0) {
+        throw new RangeError("gracePeriodDays must be a non-negative integer.");
     }
 
     if (!Number.isInteger(config.minimumPasswordAgeDays) || config.minimumPasswordAgeDays < 0) {

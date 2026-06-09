@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+    addUtcCalendarDays,
     createBulkPasswordHistoryComparisonStrategy,
+    daysBetweenUtcCalendarDates,
     IdentityPolicyEngine,
     normalizePasswordCreatedAt,
+    toUtcStartOfDay,
 } from "../src/engine";
 import type { PasswordPersistenceCallbacks } from "../src/interfaces";
 
@@ -376,6 +379,170 @@ describe("IdentityPolicyEngine - expiry", () => {
         expect(expired).toBe(false);
         vi.useRealTimers();
     });
+
+    it("returns remaining days until expiry", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+        const engine = new IdentityPolicyEngine({
+            expiryDays: 90,
+            persistence: createPersistenceMock(),
+        });
+
+        const remainingDays = engine.daysUntilExpiry("2026-03-08T00:00:00.000Z");
+
+        expect(remainingDays).toBe(1);
+        vi.useRealTimers();
+    });
+
+    it("returns zero days when password is already expired", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+        const engine = new IdentityPolicyEngine({
+            expiryDays: 90,
+            persistence: createPersistenceMock(),
+        });
+
+        const remainingDays = engine.daysUntilExpiry("2026-03-07T00:00:00.000Z");
+
+        expect(remainingDays).toBe(0);
+        vi.useRealTimers();
+    });
+
+    it("detects when an expired password is still inside grace period", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+        const engine = new IdentityPolicyEngine({
+            expiryDays: 90,
+            gracePeriodDays: 7,
+            persistence: createPersistenceMock(),
+        });
+
+        const inGrace = engine.isWithinGracePeriod("2026-03-06T00:00:00.000Z");
+
+        expect(inGrace).toBe(true);
+        vi.useRealTimers();
+    });
+
+    it("returns remaining days in grace period", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+        const engine = new IdentityPolicyEngine({
+            expiryDays: 90,
+            gracePeriodDays: 7,
+            persistence: createPersistenceMock(),
+        });
+
+        const remainingGraceDays = engine.daysRemainingInGracePeriod("2026-03-06T00:00:00.000Z");
+
+        expect(remainingGraceDays).toBe(6);
+        vi.useRealTimers();
+    });
+
+    it("returns false/zero outside grace period", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+        const engine = new IdentityPolicyEngine({
+            expiryDays: 90,
+            gracePeriodDays: 7,
+            persistence: createPersistenceMock(),
+        });
+
+        const inGrace = engine.isWithinGracePeriod("2026-02-26T00:00:00.000Z");
+        const remainingGraceDays = engine.daysRemainingInGracePeriod("2026-02-26T00:00:00.000Z");
+
+        expect(inGrace).toBe(false);
+        expect(remainingGraceDays).toBe(0);
+        vi.useRealTimers();
+    });
+
+    it("evaluates expiry state as valid", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+        const engine = new IdentityPolicyEngine({
+            expiryDays: 90,
+            expiryWarningDays: 7,
+            gracePeriodDays: 7,
+            persistence: createPersistenceMock(),
+        });
+
+        const state = engine.evaluateExpiryState("2026-03-15T00:00:00.000Z");
+
+        expect(state).toEqual({
+            state: "valid",
+            daysUntilExpiry: 8,
+            daysRemainingInGracePeriod: 0,
+        });
+        vi.useRealTimers();
+    });
+
+    it("evaluates expiry state as warning", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+        const engine = new IdentityPolicyEngine({
+            expiryDays: 90,
+            expiryWarningDays: 7,
+            gracePeriodDays: 7,
+            persistence: createPersistenceMock(),
+        });
+
+        const state = engine.evaluateExpiryState("2026-03-08T00:00:00.000Z");
+
+        expect(state).toEqual({
+            state: "warning",
+            daysUntilExpiry: 1,
+            daysRemainingInGracePeriod: 0,
+        });
+        vi.useRealTimers();
+    });
+
+    it("evaluates expiry state as grace", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+        const engine = new IdentityPolicyEngine({
+            expiryDays: 90,
+            expiryWarningDays: 7,
+            gracePeriodDays: 7,
+            persistence: createPersistenceMock(),
+        });
+
+        const state = engine.evaluateExpiryState("2026-03-06T00:00:00.000Z");
+
+        expect(state).toEqual({
+            state: "grace",
+            daysUntilExpiry: 0,
+            daysRemainingInGracePeriod: 6,
+        });
+        vi.useRealTimers();
+    });
+
+    it("evaluates expiry state as expired", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+        const engine = new IdentityPolicyEngine({
+            expiryDays: 90,
+            expiryWarningDays: 7,
+            gracePeriodDays: 7,
+            persistence: createPersistenceMock(),
+        });
+
+        const state = engine.evaluateExpiryState("2026-02-26T00:00:00.000Z");
+
+        expect(state).toEqual({
+            state: "expired",
+            daysUntilExpiry: 0,
+            daysRemainingInGracePeriod: 0,
+        });
+        vi.useRealTimers();
+    });
 });
 
 describe("normalizePasswordCreatedAt", () => {
@@ -391,6 +558,35 @@ describe("normalizePasswordCreatedAt", () => {
 
         expect(d1.toISOString()).toBe("2026-01-01T00:00:00.000Z");
         expect(d2.toISOString()).toBe("2026-01-01T00:00:00.000Z");
+    });
+});
+
+describe("UTC calendar utilities", () => {
+    it("normalizes to UTC start of day", () => {
+        const value = toUtcStartOfDay("2026-06-09T15:34:00.000Z");
+
+        expect(value.toISOString()).toBe("2026-06-09T00:00:00.000Z");
+    });
+
+    it("adds calendar days in UTC", () => {
+        const value = addUtcCalendarDays("2026-06-09T15:34:00.000Z", 5);
+
+        expect(value.toISOString()).toBe("2026-06-14T00:00:00.000Z");
+    });
+
+    it("computes day differences with UTC calendar semantics", () => {
+        const diff = daysBetweenUtcCalendarDates(
+            "2026-06-09T23:59:59.000Z",
+            "2026-06-14T00:00:01.000Z",
+        );
+
+        expect(diff).toBe(5);
+    });
+
+    it("throws when addUtcCalendarDays gets non-integer days", () => {
+        expect(() => addUtcCalendarDays("2026-06-09T15:34:00.000Z", 1.2)).toThrow(
+            "days must be an integer.",
+        );
     });
 });
 
@@ -426,5 +622,23 @@ describe("IdentityPolicyEngine - config validation", () => {
         }).toThrow(
             "getPreviousPasswordSubstrings persistence callback is required when blockSubstringsFromPreviousSecrets is enabled.",
         );
+    });
+
+    it("throws when gracePeriodDays is negative", () => {
+        expect(() => {
+            new IdentityPolicyEngine({
+                gracePeriodDays: -1,
+                persistence: createPersistenceMock(),
+            });
+        }).toThrow("gracePeriodDays must be a non-negative integer.");
+    });
+
+    it("throws when expiryWarningDays is negative", () => {
+        expect(() => {
+            new IdentityPolicyEngine({
+                expiryWarningDays: -1,
+                persistence: createPersistenceMock(),
+            });
+        }).toThrow("expiryWarningDays must be a non-negative integer.");
     });
 });

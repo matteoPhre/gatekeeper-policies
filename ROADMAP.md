@@ -19,10 +19,10 @@ This roadmap focuses on strengthening policy controls while preserving the curre
 
 ## Phase 3 - Expiry Lifecycle Extensions
 
-1. Add warning window calculation (`daysUntilExpiry`).
-2. Add helper APIs for grace periods after expiry.
-3. Add explicit result type for expiry states (`valid`, `warning`, `expired`, `grace`).
-4. Add utilities for UTC-safe calendar-based policies.
+1. [x] Add warning window calculation (`daysUntilExpiry`).
+2. [x] Add helper APIs for grace periods after expiry.
+3. [x] Add explicit result type for expiry states (`valid`, `warning`, `expired`, `grace`).
+4. [x] Add utilities for UTC-safe calendar-based policies.
 
 ## Phase 4 - Operational and Security Features
 
@@ -44,6 +44,13 @@ This roadmap focuses on strengthening policy controls while preserving the curre
 2. Add property-based tests for complexity and rotation edge cases.
 3. Add CI matrix for multiple Node LTS versions.
 4. Add semantic-release workflow and changelog automation.
+
+## Phase 7 - Advanced Validation and Security Integrations
+
+1. Add high-density structured complexity errors (`code` + `meta`) to support host-driven i18n mapping without localization coupling.
+2. Add optional pluggable entropy verification hooks (`entropyValidator`) for async strength analysis without bundling external analyzers.
+3. Add zero-knowledge compromised password audit helpers (k-Anonymity flow) with host-managed network calls for breach checks.
+4. Enforce deterministic normalization sequencing so trim/unicode normalization always run before length/composition metrics.
 
 ## Compatibility Commitment
 
