@@ -1,681 +1,783 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-    addUtcCalendarDays,
-    createBulkPasswordHistoryComparisonStrategy,
-    daysBetweenUtcCalendarDates,
-    IdentityPolicyEngine,
-    normalizePasswordCreatedAt,
-    toUtcStartOfDay,
+  addUtcCalendarDays,
+  createCompromisedPasswordDictionaryValidator,
+  createBulkPasswordHistoryComparisonStrategy,
+  createScoreBasedEntropyValidator,
+  daysBetweenUtcCalendarDates,
+  IdentityPolicyEngine,
+  normalizePasswordCreatedAt,
+  toUtcStartOfDay,
 } from "../src/engine";
-import type { PasswordAuditEvent, PasswordPersistenceCallbacks } from "../src/interfaces";
+import type {
+  PasswordAuditEvent,
+  PasswordPersistenceCallbacks,
+} from "../src/interfaces";
 
 function createPersistenceMock(
-    history: string[] = [],
-    previousSubstrings?: string[],
+  history: string[] = [],
+  previousSubstrings?: string[],
 ): PasswordPersistenceCallbacks {
-    return {
-        getPasswordHistory: vi.fn(async () => history),
-        saveNewPassword: vi.fn(async () => undefined),
-        getPreviousPasswordSubstrings: vi.fn(async () => previousSubstrings ?? []),
-    };
+  return {
+    getPasswordHistory: vi.fn(async () => history),
+    saveNewPassword: vi.fn(async () => undefined),
+    getPreviousPasswordSubstrings: vi.fn(async () => previousSubstrings ?? []),
+  };
 }
 
 describe("IdentityPolicyEngine - complexity", () => {
-    it("rejects weak password with detailed errors", () => {
-        const engine = new IdentityPolicyEngine({
-            persistence: createPersistenceMock(),
-        });
-
-        const result = engine.validateComplexity("short");
-
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toEqual([
-            "Password must be at least 12 characters long.",
-            "Password must include at least one uppercase letter.",
-            "Password must include at least one number.",
-            "Password must include at least one symbol.",
-        ]);
-        expect(result.issues).toEqual([
-            expect.objectContaining({ code: "PASSWORD_TOO_SHORT" }),
-            expect.objectContaining({ code: "PASSWORD_MISSING_UPPERCASE" }),
-            expect.objectContaining({ code: "PASSWORD_MISSING_NUMBER" }),
-            expect.objectContaining({ code: "PASSWORD_MISSING_SYMBOL" }),
-        ]);
+  it("rejects weak password with detailed errors", () => {
+    const engine = new IdentityPolicyEngine({
+      persistence: createPersistenceMock(),
     });
 
-    it("accepts password that satisfies default policy", () => {
-        const engine = new IdentityPolicyEngine({
-            persistence: createPersistenceMock(),
-        });
+    const result = engine.validateComplexity("short");
 
-        const result = engine.validateComplexity("StrongPassword#2026");
+    expect(result.isValid).toBe(false);
+    expect(result.errors).toEqual([
+      "Password must be at least 12 characters long.",
+      "Password must include at least one uppercase letter.",
+      "Password must include at least one number.",
+      "Password must include at least one symbol.",
+    ]);
+    expect(result.issues).toEqual([
+      expect.objectContaining({
+        code: "PASSWORD_TOO_SHORT",
+        meta: expect.objectContaining({
+          actualLength: 5,
+          requiredMinLength: 12,
+        }),
+      }),
+      expect.objectContaining({ code: "PASSWORD_MISSING_UPPERCASE" }),
+      expect.objectContaining({ code: "PASSWORD_MISSING_NUMBER" }),
+      expect.objectContaining({ code: "PASSWORD_MISSING_SYMBOL" }),
+    ]);
+  });
 
-        expect(result).toEqual({ isValid: true, errors: [] });
+  it("accepts password that satisfies default policy", () => {
+    const engine = new IdentityPolicyEngine({
+      persistence: createPersistenceMock(),
     });
 
-    it("supports custom relaxed policy", () => {
-        const engine = new IdentityPolicyEngine({
-            minLength: 6,
-            requireUppercase: false,
-            requireNumbers: false,
-            requireSymbols: false,
-            persistence: createPersistenceMock(),
-        });
+    const result = engine.validateComplexity("StrongPassword#2026");
 
-        const result = engine.validateComplexity("abcdef");
+    expect(result).toEqual({ isValid: true, errors: [] });
+  });
 
-        expect(result).toEqual({ isValid: true, errors: [] });
+  it("supports custom relaxed policy", () => {
+    const engine = new IdentityPolicyEngine({
+      minLength: 6,
+      requireUppercase: false,
+      requireNumbers: false,
+      requireSymbols: false,
+      persistence: createPersistenceMock(),
     });
 
-    it("rejects password when maxLength is exceeded", () => {
-        const engine = new IdentityPolicyEngine({
-            minLength: 3,
-            maxLength: 5,
-            requireUppercase: false,
-            requireLowercase: false,
-            requireNumbers: false,
-            requireSymbols: false,
-            persistence: createPersistenceMock(),
-        });
+    const result = engine.validateComplexity("abcdef");
 
-        const result = engine.validateComplexity("123456");
+    expect(result).toEqual({ isValid: true, errors: [] });
+  });
 
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain("Password must be at most 5 characters long.");
+  it("rejects password when maxLength is exceeded", () => {
+    const engine = new IdentityPolicyEngine({
+      minLength: 3,
+      maxLength: 5,
+      requireUppercase: false,
+      requireLowercase: false,
+      requireNumbers: false,
+      requireSymbols: false,
+      persistence: createPersistenceMock(),
     });
 
-    it("enforces lowercase when required", () => {
-        const engine = new IdentityPolicyEngine({
-            minLength: 3,
-            maxLength: 50,
-            requireUppercase: false,
-            requireLowercase: true,
-            requireNumbers: false,
-            requireSymbols: false,
-            persistence: createPersistenceMock(),
-        });
+    const result = engine.validateComplexity("123456");
 
-        const result = engine.validateComplexity("ABC123");
+    expect(result.isValid).toBe(false);
+    expect(result.errors).toContain(
+      "Password must be at most 5 characters long.",
+    );
+  });
 
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain("Password must include at least one lowercase letter.");
+  it("enforces lowercase when required", () => {
+    const engine = new IdentityPolicyEngine({
+      minLength: 3,
+      maxLength: 50,
+      requireUppercase: false,
+      requireLowercase: true,
+      requireNumbers: false,
+      requireSymbols: false,
+      persistence: createPersistenceMock(),
     });
 
-    it("blocks deny-listed patterns (case-insensitive)", () => {
-        const engine = new IdentityPolicyEngine({
-            minLength: 3,
-            maxLength: 50,
-            requireUppercase: false,
-            requireLowercase: false,
-            requireNumbers: false,
-            requireSymbols: false,
-            denyList: ["password", "qwerty"],
-            persistence: createPersistenceMock(),
-        });
+    const result = engine.validateComplexity("ABC123");
 
-        const result = engine.validateComplexity("MyPassWORD2026");
+    expect(result.isValid).toBe(false);
+    expect(result.errors).toContain(
+      "Password must include at least one lowercase letter.",
+    );
+  });
 
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain("Password contains a denied pattern.");
+  it("blocks deny-listed patterns (case-insensitive)", () => {
+    const engine = new IdentityPolicyEngine({
+      minLength: 3,
+      maxLength: 50,
+      requireUppercase: false,
+      requireLowercase: false,
+      requireNumbers: false,
+      requireSymbols: false,
+      denyList: ["password", "qwerty"],
+      persistence: createPersistenceMock(),
     });
 
-    it("blocks repeated consecutive characters when enabled", () => {
-        const engine = new IdentityPolicyEngine({
-            minLength: 3,
-            maxLength: 50,
-            requireUppercase: false,
-            requireLowercase: false,
-            requireNumbers: false,
-            requireSymbols: false,
-            preventRepeatedChars: true,
-            maxRepeatedChars: 2,
-            persistence: createPersistenceMock(),
-        });
+    const result = engine.validateComplexity("MyPassWORD2026");
 
-        const result = engine.validateComplexity("A111B");
+    expect(result.isValid).toBe(false);
+    expect(result.errors).toContain("Password contains a denied pattern.");
+  });
 
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain(
-            "Password must not contain more than 2 repeated consecutive characters.",
-        );
+  it("blocks repeated consecutive characters when enabled", () => {
+    const engine = new IdentityPolicyEngine({
+      minLength: 3,
+      maxLength: 50,
+      requireUppercase: false,
+      requireLowercase: false,
+      requireNumbers: false,
+      requireSymbols: false,
+      preventRepeatedChars: true,
+      maxRepeatedChars: 2,
+      persistence: createPersistenceMock(),
     });
 
-    it("blocks sequential runs when enabled", () => {
-        const engine = new IdentityPolicyEngine({
-            minLength: 3,
-            maxLength: 50,
-            requireUppercase: false,
-            requireLowercase: false,
-            requireNumbers: false,
-            requireSymbols: false,
-            preventSequentialChars: true,
-            maxSequentialChars: 4,
-            persistence: createPersistenceMock(),
-        });
+    const result = engine.validateComplexity("A111B");
 
-        const result = engine.validateComplexity("abCD1234!");
+    expect(result.isValid).toBe(false);
+    expect(result.errors).toContain(
+      "Password must not contain more than 2 repeated consecutive characters.",
+    );
+  });
 
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain(
-            "Password must not contain sequential character runs of length 4 or more.",
-        );
+  it("blocks sequential runs when enabled", () => {
+    const engine = new IdentityPolicyEngine({
+      minLength: 3,
+      maxLength: 50,
+      requireUppercase: false,
+      requireLowercase: false,
+      requireNumbers: false,
+      requireSymbols: false,
+      preventSequentialChars: true,
+      maxSequentialChars: 4,
+      persistence: createPersistenceMock(),
     });
 
-    it("applies trim normalization before evaluating maxLength", () => {
-        const engine = new IdentityPolicyEngine({
-            minLength: 3,
-            maxLength: 5,
-            normalizeTrim: true,
-            requireUppercase: false,
-            requireLowercase: false,
-            requireNumbers: false,
-            requireSymbols: false,
-            persistence: createPersistenceMock(),
-        });
+    const result = engine.validateComplexity("abCD1234!");
 
-        const result = engine.validateComplexity("  abc  ");
+    expect(result.isValid).toBe(false);
+    expect(result.errors).toContain(
+      "Password must not contain sequential character runs of length 4 or more.",
+    );
+  });
 
-        expect(result).toEqual({ isValid: true, errors: [] });
+  it("applies trim normalization before evaluating maxLength", () => {
+    const engine = new IdentityPolicyEngine({
+      minLength: 3,
+      maxLength: 5,
+      normalizeTrim: true,
+      requireUppercase: false,
+      requireLowercase: false,
+      requireNumbers: false,
+      requireSymbols: false,
+      persistence: createPersistenceMock(),
     });
 
-    it("applies unicode normalization before deny-list matching", () => {
-        const engine = new IdentityPolicyEngine({
-            minLength: 3,
-            maxLength: 50,
-            normalizeUnicode: true,
-            unicodeNormalizationForm: "NFC",
-            requireUppercase: false,
-            requireLowercase: false,
-            requireNumbers: false,
-            requireSymbols: false,
-            denyList: ["cafe\u0301"],
-            persistence: createPersistenceMock(),
-        });
+    const result = engine.validateComplexity("  abc  ");
 
-        const result = engine.validateComplexity("CAFÉ2026");
+    expect(result).toEqual({ isValid: true, errors: [] });
+  });
 
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain("Password contains a denied pattern.");
+  it("applies unicode normalization before deny-list matching", () => {
+    const engine = new IdentityPolicyEngine({
+      minLength: 3,
+      maxLength: 50,
+      normalizeUnicode: true,
+      unicodeNormalizationForm: "NFC",
+      requireUppercase: false,
+      requireLowercase: false,
+      requireNumbers: false,
+      requireSymbols: false,
+      denyList: ["cafe\u0301"],
+      persistence: createPersistenceMock(),
     });
 
-    it("emits audit events without affecting validation results", () => {
-        const auditEvents: PasswordAuditEvent[] = [];
-        const engine = new IdentityPolicyEngine({
-            auditEventCallback: (event) => {
-                auditEvents.push(event);
-            },
-            persistence: createPersistenceMock(),
-        });
+    const result = engine.validateComplexity("CAFÉ2026");
 
-        const result = engine.validateComplexity("short");
+    expect(result.isValid).toBe(false);
+    expect(result.errors).toContain("Password contains a denied pattern.");
+  });
 
-        expect(result.isValid).toBe(false);
-        expect(auditEvents).toEqual([
-            expect.objectContaining({
-                type: "complexity",
-                outcome: "fail",
-            }),
-        ]);
+  it("emits audit events without affecting validation results", () => {
+    const auditEvents: PasswordAuditEvent[] = [];
+    const engine = new IdentityPolicyEngine({
+      auditEventCallback: (event) => {
+        auditEvents.push(event);
+      },
+      persistence: createPersistenceMock(),
     });
 
-    it("swallows audit callback failures", () => {
-        const engine = new IdentityPolicyEngine({
-            auditEventCallback: () => {
-                throw new Error("audit failed");
-            },
-            persistence: createPersistenceMock(),
-        });
+    const result = engine.validateComplexity("short");
 
-        expect(() => engine.validateComplexity("short")).not.toThrow();
+    expect(result.isValid).toBe(false);
+    expect(auditEvents).toEqual([
+      expect.objectContaining({
+        type: "complexity",
+        outcome: "fail",
+      }),
+    ]);
+  });
+
+  it("swallows audit callback failures", () => {
+    const engine = new IdentityPolicyEngine({
+      auditEventCallback: () => {
+        throw new Error("audit failed");
+      },
+      persistence: createPersistenceMock(),
     });
+
+    expect(() => engine.validateComplexity("short")).not.toThrow();
+  });
+
+  it("supports entropy and compromised-password extension hooks", async () => {
+    const engine = new IdentityPolicyEngine({
+      entropyValidator: async () => ({
+        isValid: false,
+        score: 2,
+        details: { minimumScore: 3 },
+      }),
+      compromisedPasswordValidator: async () => ({
+        isCompromised: true,
+        details: { source: "k-anon" },
+      }),
+      persistence: createPersistenceMock(),
+    });
+
+    const result = await engine.validateComplexityWithExtensions(
+      "StrongPassword#2026",
+    );
+
+    expect(result.isValid).toBe(false);
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "PASSWORD_ENTROPY_TOO_LOW" }),
+        expect.objectContaining({ code: "PASSWORD_COMPROMISED" }),
+      ]),
+    );
+  });
+
+  it("provides score-based and dictionary adapters for intrinsic checks", async () => {
+    const entropyValidator = createScoreBasedEntropyValidator(async () => 2, 3);
+    const compromisedValidator = createCompromisedPasswordDictionaryValidator([
+      "strongpassword#2026",
+    ]);
+
+    const entropyResult = await entropyValidator({
+      password: "StrongPassword#2026",
+      normalizedPassword: "StrongPassword#2026",
+    });
+
+    const compromisedResult = await compromisedValidator({
+      password: "StrongPassword#2026",
+      normalizedPassword: "StrongPassword#2026",
+    });
+
+    expect(entropyResult).toMatchObject({ isValid: false, score: 2 });
+    expect(compromisedResult).toMatchObject({ isCompromised: true });
+  });
 });
 
 describe("IdentityPolicyEngine - rotation", () => {
-    it("blocks password reuse when compare function matches history hash", async () => {
-        const engine = new IdentityPolicyEngine({
-            persistence: createPersistenceMock(["h1", "h2", "h3"]),
-        });
-
-        const compareFn = vi.fn(async (_plain: string | Uint8Array, encrypted: string) => encrypted === "h2");
-
-        const allowed = await engine.validateRotation("candidate", "user-1", compareFn);
-
-        expect(allowed).toBe(false);
-        expect(compareFn).toHaveBeenCalledTimes(2);
+  it("blocks password reuse when compare function matches history hash", async () => {
+    const engine = new IdentityPolicyEngine({
+      persistence: createPersistenceMock(["h1", "h2", "h3"]),
     });
 
-    it("respects historyLimit when evaluating reuse", async () => {
-        const engine = new IdentityPolicyEngine({
-            historyLimit: 2,
-            persistence: createPersistenceMock(["h1", "h2", "h3"]),
-        });
+    const compareFn = vi.fn(
+      async (_plain: string | Uint8Array, encrypted: string) =>
+        encrypted === "h2",
+    );
 
-        const compareFn = vi.fn(async (_plain: string | Uint8Array, encrypted: string) => encrypted === "h3");
+    const allowed = await engine.validateRotation(
+      "candidate",
+      "user-1",
+      compareFn,
+    );
 
-        const allowed = await engine.validateRotation("candidate", "user-1", compareFn);
+    expect(allowed).toBe(false);
+    expect(compareFn).toHaveBeenCalledTimes(2);
+  });
 
-        expect(allowed).toBe(true);
-        expect(compareFn).toHaveBeenCalledTimes(2);
+  it("respects historyLimit when evaluating reuse", async () => {
+    const engine = new IdentityPolicyEngine({
+      historyLimit: 2,
+      persistence: createPersistenceMock(["h1", "h2", "h3"]),
     });
 
-    it("supports custom history comparison strategies for advanced stores", async () => {
-        const engine = new IdentityPolicyEngine({
-            historyLimit: 2,
-            normalizeTrim: true,
-            persistence: createPersistenceMock(["h1", "h2", "h3"]),
-        });
+    const compareFn = vi.fn(
+      async (_plain: string | Uint8Array, encrypted: string) =>
+        encrypted === "h3",
+    );
 
-        const strategy = {
-            isReused: vi.fn(async (context) => {
-                expect(context).toMatchObject({
-                    userId: "user-1",
-                    plainPassword: "  candidate  ",
-                    normalizedPassword: "candidate",
-                    history: ["h1", "h2"],
-                    historyLimit: 2,
-                });
+    const allowed = await engine.validateRotation(
+      "candidate",
+      "user-1",
+      compareFn,
+    );
 
-                return true;
-            }),
-        };
+    expect(allowed).toBe(true);
+    expect(compareFn).toHaveBeenCalledTimes(2);
+  });
 
-        const allowed = await engine.validateRotation("  candidate  ", "user-1", strategy);
-
-        expect(allowed).toBe(false);
-        expect(strategy.isReused).toHaveBeenCalledTimes(1);
+  it("supports custom history comparison strategies for advanced stores", async () => {
+    const engine = new IdentityPolicyEngine({
+      historyLimit: 2,
+      normalizeTrim: true,
+      persistence: createPersistenceMock(["h1", "h2", "h3"]),
     });
 
-    it("provides a bulk-history helper for optimized remote adapters", async () => {
-        const engine = new IdentityPolicyEngine({
-            historyLimit: 2,
-            normalizeTrim: true,
-            persistence: createPersistenceMock(["h1", "h2", "h3"]),
+    const strategy = {
+      isReused: vi.fn(async (context) => {
+        expect(context).toMatchObject({
+          userId: "user-1",
+          plainPassword: "  candidate  ",
+          normalizedPassword: "candidate",
+          history: ["h1", "h2"],
+          historyLimit: 2,
         });
 
-        const compareFn = vi.fn(async (normalizedPassword, history, context) => {
-            expect(normalizedPassword).toBe("candidate");
-            expect(history).toEqual(["h1", "h2"]);
-            expect(context).toEqual({
-                userId: "user-1",
-                plainPassword: "  candidate  ",
-                historyLimit: 2,
-            });
+        return true;
+      }),
+    };
 
-            return true;
-        });
+    const allowed = await engine.validateRotation(
+      "  candidate  ",
+      "user-1",
+      strategy,
+    );
 
-        const comparator = createBulkPasswordHistoryComparisonStrategy(compareFn);
-        const allowed = await engine.validateRotation("  candidate  ", "user-1", comparator);
+    expect(allowed).toBe(false);
+    expect(strategy.isReused).toHaveBeenCalledTimes(1);
+  });
 
-        expect(allowed).toBe(false);
-        expect(compareFn).toHaveBeenCalledTimes(1);
+  it("provides a bulk-history helper for optimized remote adapters", async () => {
+    const engine = new IdentityPolicyEngine({
+      historyLimit: 2,
+      normalizeTrim: true,
+      persistence: createPersistenceMock(["h1", "h2", "h3"]),
     });
 
-    it("blocks password rotation when candidate includes previous secret substrings", async () => {
-        const engine = new IdentityPolicyEngine({
-            blockSubstringsFromPreviousSecrets: true,
-            minPreviousSecretSubstringLength: 4,
-            persistence: createPersistenceMock(["h1"], ["legacy", "abc"]),
-        });
+    const compareFn = vi.fn(async (normalizedPassword, history, context) => {
+      expect(normalizedPassword).toBe("candidate");
+      expect(history).toEqual(["h1", "h2"]);
+      expect(context).toEqual({
+        userId: "user-1",
+        plainPassword: "  candidate  ",
+        historyLimit: 2,
+      });
 
-        const compareFn = vi.fn(async () => false);
-        const allowed = await engine.validateRotation("MyLegacyPassword#2026", "user-1", compareFn);
-
-        expect(allowed).toBe(false);
-        expect(compareFn).not.toHaveBeenCalled();
+      return true;
     });
 
-    it("ignores previous secret fragments shorter than the configured minimum", async () => {
-        const engine = new IdentityPolicyEngine({
-            blockSubstringsFromPreviousSecrets: true,
-            minPreviousSecretSubstringLength: 5,
-            persistence: createPersistenceMock(["h1"], ["legacy", "abcd"]),
-        });
+    const comparator = createBulkPasswordHistoryComparisonStrategy(compareFn);
+    const allowed = await engine.validateRotation(
+      "  candidate  ",
+      "user-1",
+      comparator,
+    );
 
-        const compareFn = vi.fn(async () => false);
-        const allowed = await engine.validateRotation("abcd-safe-password", "user-1", compareFn);
+    expect(allowed).toBe(false);
+    expect(compareFn).toHaveBeenCalledTimes(1);
+  });
 
-        expect(allowed).toBe(true);
-        expect(compareFn).toHaveBeenCalledTimes(1);
+  it("blocks password rotation when candidate includes previous secret substrings", async () => {
+    const engine = new IdentityPolicyEngine({
+      blockSubstringsFromPreviousSecrets: true,
+      minPreviousSecretSubstringLength: 4,
+      persistence: createPersistenceMock(["h1"], ["legacy", "abc"]),
     });
+
+    const compareFn = vi.fn(async () => false);
+    const allowed = await engine.validateRotation(
+      "MyLegacyPassword#2026",
+      "user-1",
+      compareFn,
+    );
+
+    expect(allowed).toBe(false);
+    expect(compareFn).not.toHaveBeenCalled();
+  });
+
+  it("ignores previous secret fragments shorter than the configured minimum", async () => {
+    const engine = new IdentityPolicyEngine({
+      blockSubstringsFromPreviousSecrets: true,
+      minPreviousSecretSubstringLength: 5,
+      persistence: createPersistenceMock(["h1"], ["legacy", "abcd"]),
+    });
+
+    const compareFn = vi.fn(async () => false);
+    const allowed = await engine.validateRotation(
+      "abcd-safe-password",
+      "user-1",
+      compareFn,
+    );
+
+    expect(allowed).toBe(true);
+    expect(compareFn).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("IdentityPolicyEngine - minimum password age", () => {
-    it("allows password change when minimumPasswordAgeDays is disabled", () => {
-        vi.useFakeTimers();
-        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+  it("allows password change when minimumPasswordAgeDays is disabled", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
 
-        const engine = new IdentityPolicyEngine({
-            persistence: createPersistenceMock(),
-        });
-
-        const allowed = engine.isMinimumPasswordAgeSatisfied("2026-06-04T00:00:00.000Z");
-
-        expect(allowed).toBe(true);
-        vi.useRealTimers();
+    const engine = new IdentityPolicyEngine({
+      persistence: createPersistenceMock(),
     });
 
-    it("blocks password change when minimum age has not been reached", () => {
-        vi.useFakeTimers();
-        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+    const allowed = engine.isMinimumPasswordAgeSatisfied(
+      "2026-06-04T00:00:00.000Z",
+    );
 
-        const engine = new IdentityPolicyEngine({
-            minimumPasswordAgeDays: 7,
-            persistence: createPersistenceMock(),
-        });
+    expect(allowed).toBe(true);
+    vi.useRealTimers();
+  });
 
-        const allowed = engine.isMinimumPasswordAgeSatisfied("2026-06-01T00:00:00.000Z");
+  it("blocks password change when minimum age has not been reached", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
 
-        expect(allowed).toBe(false);
-        vi.useRealTimers();
+    const engine = new IdentityPolicyEngine({
+      minimumPasswordAgeDays: 7,
+      persistence: createPersistenceMock(),
     });
 
-    it("allows password change when minimum age has been reached", () => {
-        vi.useFakeTimers();
-        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+    const allowed = engine.isMinimumPasswordAgeSatisfied(
+      "2026-06-01T00:00:00.000Z",
+    );
 
-        const engine = new IdentityPolicyEngine({
-            minimumPasswordAgeDays: 7,
-            persistence: createPersistenceMock(),
-        });
+    expect(allowed).toBe(false);
+    vi.useRealTimers();
+  });
 
-        const allowed = engine.isMinimumPasswordAgeSatisfied("2026-05-29T00:00:00.000Z");
+  it("allows password change when minimum age has been reached", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
 
-        expect(allowed).toBe(true);
-        vi.useRealTimers();
+    const engine = new IdentityPolicyEngine({
+      minimumPasswordAgeDays: 7,
+      persistence: createPersistenceMock(),
     });
+
+    const allowed = engine.isMinimumPasswordAgeSatisfied(
+      "2026-05-29T00:00:00.000Z",
+    );
+
+    expect(allowed).toBe(true);
+    vi.useRealTimers();
+  });
 });
 
 describe("IdentityPolicyEngine - expiry", () => {
-    it("marks password as expired when age is greater or equal than expiryDays", () => {
-        vi.useFakeTimers();
-        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+  it("marks password as expired when age is greater or equal than expiryDays", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
 
-        const engine = new IdentityPolicyEngine({
-            expiryDays: 90,
-            persistence: createPersistenceMock(),
-        });
-
-        const expired = engine.isPasswordExpired("2026-03-07T00:00:00.000Z");
-
-        expect(expired).toBe(true);
-        vi.useRealTimers();
+    const engine = new IdentityPolicyEngine({
+      expiryDays: 90,
+      persistence: createPersistenceMock(),
     });
 
-    it("marks password as valid when still within expiry window", () => {
-        vi.useFakeTimers();
-        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+    const expired = engine.isPasswordExpired("2026-03-07T00:00:00.000Z");
 
-        const engine = new IdentityPolicyEngine({
-            expiryDays: 90,
-            persistence: createPersistenceMock(),
-        });
+    expect(expired).toBe(true);
+    vi.useRealTimers();
+  });
 
-        const expired = engine.isPasswordExpired("2026-03-08T00:00:00.000Z");
+  it("marks password as valid when still within expiry window", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
 
-        expect(expired).toBe(false);
-        vi.useRealTimers();
+    const engine = new IdentityPolicyEngine({
+      expiryDays: 90,
+      persistence: createPersistenceMock(),
     });
 
-    it("returns remaining days until expiry", () => {
-        vi.useFakeTimers();
-        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+    const expired = engine.isPasswordExpired("2026-03-08T00:00:00.000Z");
 
-        const engine = new IdentityPolicyEngine({
-            expiryDays: 90,
-            persistence: createPersistenceMock(),
-        });
+    expect(expired).toBe(false);
+    vi.useRealTimers();
+  });
 
-        const remainingDays = engine.daysUntilExpiry("2026-03-08T00:00:00.000Z");
+  it("returns remaining days until expiry", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
 
-        expect(remainingDays).toBe(1);
-        vi.useRealTimers();
+    const engine = new IdentityPolicyEngine({
+      expiryDays: 90,
+      persistence: createPersistenceMock(),
     });
 
-    it("returns zero days when password is already expired", () => {
-        vi.useFakeTimers();
-        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+    const remainingDays = engine.daysUntilExpiry("2026-03-08T00:00:00.000Z");
 
-        const engine = new IdentityPolicyEngine({
-            expiryDays: 90,
-            persistence: createPersistenceMock(),
-        });
+    expect(remainingDays).toBe(1);
+    vi.useRealTimers();
+  });
 
-        const remainingDays = engine.daysUntilExpiry("2026-03-07T00:00:00.000Z");
+  it("returns zero days when password is already expired", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
 
-        expect(remainingDays).toBe(0);
-        vi.useRealTimers();
+    const engine = new IdentityPolicyEngine({
+      expiryDays: 90,
+      persistence: createPersistenceMock(),
     });
 
-    it("detects when an expired password is still inside grace period", () => {
-        vi.useFakeTimers();
-        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+    const remainingDays = engine.daysUntilExpiry("2026-03-07T00:00:00.000Z");
 
-        const engine = new IdentityPolicyEngine({
-            expiryDays: 90,
-            gracePeriodDays: 7,
-            persistence: createPersistenceMock(),
-        });
+    expect(remainingDays).toBe(0);
+    vi.useRealTimers();
+  });
 
-        const inGrace = engine.isWithinGracePeriod("2026-03-06T00:00:00.000Z");
+  it("detects when an expired password is still inside grace period", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
 
-        expect(inGrace).toBe(true);
-        vi.useRealTimers();
+    const engine = new IdentityPolicyEngine({
+      expiryDays: 90,
+      gracePeriodDays: 7,
+      persistence: createPersistenceMock(),
     });
 
-    it("returns remaining days in grace period", () => {
-        vi.useFakeTimers();
-        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+    const inGrace = engine.isWithinGracePeriod("2026-03-06T00:00:00.000Z");
 
-        const engine = new IdentityPolicyEngine({
-            expiryDays: 90,
-            gracePeriodDays: 7,
-            persistence: createPersistenceMock(),
-        });
+    expect(inGrace).toBe(true);
+    vi.useRealTimers();
+  });
 
-        const remainingGraceDays = engine.daysRemainingInGracePeriod("2026-03-06T00:00:00.000Z");
+  it("returns remaining days in grace period", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
 
-        expect(remainingGraceDays).toBe(6);
-        vi.useRealTimers();
+    const engine = new IdentityPolicyEngine({
+      expiryDays: 90,
+      gracePeriodDays: 7,
+      persistence: createPersistenceMock(),
     });
 
-    it("returns false/zero outside grace period", () => {
-        vi.useFakeTimers();
-        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+    const remainingGraceDays = engine.daysRemainingInGracePeriod(
+      "2026-03-06T00:00:00.000Z",
+    );
 
-        const engine = new IdentityPolicyEngine({
-            expiryDays: 90,
-            gracePeriodDays: 7,
-            persistence: createPersistenceMock(),
-        });
+    expect(remainingGraceDays).toBe(6);
+    vi.useRealTimers();
+  });
 
-        const inGrace = engine.isWithinGracePeriod("2026-02-26T00:00:00.000Z");
-        const remainingGraceDays = engine.daysRemainingInGracePeriod("2026-02-26T00:00:00.000Z");
+  it("returns false/zero outside grace period", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
 
-        expect(inGrace).toBe(false);
-        expect(remainingGraceDays).toBe(0);
-        vi.useRealTimers();
+    const engine = new IdentityPolicyEngine({
+      expiryDays: 90,
+      gracePeriodDays: 7,
+      persistence: createPersistenceMock(),
     });
 
-    it("evaluates expiry state as valid", () => {
-        vi.useFakeTimers();
-        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+    const inGrace = engine.isWithinGracePeriod("2026-02-26T00:00:00.000Z");
+    const remainingGraceDays = engine.daysRemainingInGracePeriod(
+      "2026-02-26T00:00:00.000Z",
+    );
 
-        const engine = new IdentityPolicyEngine({
-            expiryDays: 90,
-            expiryWarningDays: 7,
-            gracePeriodDays: 7,
-            persistence: createPersistenceMock(),
-        });
+    expect(inGrace).toBe(false);
+    expect(remainingGraceDays).toBe(0);
+    vi.useRealTimers();
+  });
 
-        const state = engine.evaluateExpiryState("2026-03-15T00:00:00.000Z");
+  it("evaluates expiry state as valid", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
 
-        expect(state).toEqual({
-            state: "valid",
-            daysUntilExpiry: 8,
-            daysRemainingInGracePeriod: 0,
-        });
-        vi.useRealTimers();
+    const engine = new IdentityPolicyEngine({
+      expiryDays: 90,
+      expiryWarningDays: 7,
+      gracePeriodDays: 7,
+      persistence: createPersistenceMock(),
     });
 
-    it("evaluates expiry state as warning", () => {
-        vi.useFakeTimers();
-        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+    const state = engine.evaluateExpiryState("2026-03-15T00:00:00.000Z");
 
-        const engine = new IdentityPolicyEngine({
-            expiryDays: 90,
-            expiryWarningDays: 7,
-            gracePeriodDays: 7,
-            persistence: createPersistenceMock(),
-        });
+    expect(state).toEqual({
+      state: "valid",
+      daysUntilExpiry: 8,
+      daysRemainingInGracePeriod: 0,
+    });
+    vi.useRealTimers();
+  });
 
-        const state = engine.evaluateExpiryState("2026-03-08T00:00:00.000Z");
+  it("evaluates expiry state as warning", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
 
-        expect(state).toEqual({
-            state: "warning",
-            daysUntilExpiry: 1,
-            daysRemainingInGracePeriod: 0,
-        });
-        vi.useRealTimers();
+    const engine = new IdentityPolicyEngine({
+      expiryDays: 90,
+      expiryWarningDays: 7,
+      gracePeriodDays: 7,
+      persistence: createPersistenceMock(),
     });
 
-    it("evaluates expiry state as grace", () => {
-        vi.useFakeTimers();
-        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+    const state = engine.evaluateExpiryState("2026-03-08T00:00:00.000Z");
 
-        const engine = new IdentityPolicyEngine({
-            expiryDays: 90,
-            expiryWarningDays: 7,
-            gracePeriodDays: 7,
-            persistence: createPersistenceMock(),
-        });
+    expect(state).toEqual({
+      state: "warning",
+      daysUntilExpiry: 1,
+      daysRemainingInGracePeriod: 0,
+    });
+    vi.useRealTimers();
+  });
 
-        const state = engine.evaluateExpiryState("2026-03-06T00:00:00.000Z");
+  it("evaluates expiry state as grace", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
 
-        expect(state).toEqual({
-            state: "grace",
-            daysUntilExpiry: 0,
-            daysRemainingInGracePeriod: 6,
-        });
-        vi.useRealTimers();
+    const engine = new IdentityPolicyEngine({
+      expiryDays: 90,
+      expiryWarningDays: 7,
+      gracePeriodDays: 7,
+      persistence: createPersistenceMock(),
     });
 
-    it("evaluates expiry state as expired", () => {
-        vi.useFakeTimers();
-        vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+    const state = engine.evaluateExpiryState("2026-03-06T00:00:00.000Z");
 
-        const engine = new IdentityPolicyEngine({
-            expiryDays: 90,
-            expiryWarningDays: 7,
-            gracePeriodDays: 7,
-            persistence: createPersistenceMock(),
-        });
-
-        const state = engine.evaluateExpiryState("2026-02-26T00:00:00.000Z");
-
-        expect(state).toEqual({
-            state: "expired",
-            daysUntilExpiry: 0,
-            daysRemainingInGracePeriod: 0,
-        });
-        vi.useRealTimers();
+    expect(state).toEqual({
+      state: "grace",
+      daysUntilExpiry: 0,
+      daysRemainingInGracePeriod: 6,
     });
+    vi.useRealTimers();
+  });
+
+  it("evaluates expiry state as expired", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+    const engine = new IdentityPolicyEngine({
+      expiryDays: 90,
+      expiryWarningDays: 7,
+      gracePeriodDays: 7,
+      persistence: createPersistenceMock(),
+    });
+
+    const state = engine.evaluateExpiryState("2026-02-26T00:00:00.000Z");
+
+    expect(state).toEqual({
+      state: "expired",
+      daysUntilExpiry: 0,
+      daysRemainingInGracePeriod: 0,
+    });
+    vi.useRealTimers();
+  });
 });
 
 describe("normalizePasswordCreatedAt", () => {
-    it("throws for invalid date string", () => {
-        expect(() => normalizePasswordCreatedAt("not-a-date")).toThrow(
-            "Invalid passwordCreatedAt ISO string.",
-        );
-    });
+  it("throws for invalid date string", () => {
+    expect(() => normalizePasswordCreatedAt("not-a-date")).toThrow(
+      "Invalid passwordCreatedAt ISO string.",
+    );
+  });
 
-    it("accepts Date and ISO string", () => {
-        const d1 = normalizePasswordCreatedAt(new Date("2026-01-01T00:00:00.000Z"));
-        const d2 = normalizePasswordCreatedAt("2026-01-01T00:00:00.000Z");
+  it("accepts Date and ISO string", () => {
+    const d1 = normalizePasswordCreatedAt(new Date("2026-01-01T00:00:00.000Z"));
+    const d2 = normalizePasswordCreatedAt("2026-01-01T00:00:00.000Z");
 
-        expect(d1.toISOString()).toBe("2026-01-01T00:00:00.000Z");
-        expect(d2.toISOString()).toBe("2026-01-01T00:00:00.000Z");
-    });
+    expect(d1.toISOString()).toBe("2026-01-01T00:00:00.000Z");
+    expect(d2.toISOString()).toBe("2026-01-01T00:00:00.000Z");
+  });
 });
 
 describe("UTC calendar utilities", () => {
-    it("normalizes to UTC start of day", () => {
-        const value = toUtcStartOfDay("2026-06-09T15:34:00.000Z");
+  it("normalizes to UTC start of day", () => {
+    const value = toUtcStartOfDay("2026-06-09T15:34:00.000Z");
 
-        expect(value.toISOString()).toBe("2026-06-09T00:00:00.000Z");
-    });
+    expect(value.toISOString()).toBe("2026-06-09T00:00:00.000Z");
+  });
 
-    it("adds calendar days in UTC", () => {
-        const value = addUtcCalendarDays("2026-06-09T15:34:00.000Z", 5);
+  it("adds calendar days in UTC", () => {
+    const value = addUtcCalendarDays("2026-06-09T15:34:00.000Z", 5);
 
-        expect(value.toISOString()).toBe("2026-06-14T00:00:00.000Z");
-    });
+    expect(value.toISOString()).toBe("2026-06-14T00:00:00.000Z");
+  });
 
-    it("computes day differences with UTC calendar semantics", () => {
-        const diff = daysBetweenUtcCalendarDates(
-            "2026-06-09T23:59:59.000Z",
-            "2026-06-14T00:00:01.000Z",
-        );
+  it("computes day differences with UTC calendar semantics", () => {
+    const diff = daysBetweenUtcCalendarDates(
+      "2026-06-09T23:59:59.000Z",
+      "2026-06-14T00:00:01.000Z",
+    );
 
-        expect(diff).toBe(5);
-    });
+    expect(diff).toBe(5);
+  });
 
-    it("throws when addUtcCalendarDays gets non-integer days", () => {
-        expect(() => addUtcCalendarDays("2026-06-09T15:34:00.000Z", 1.2)).toThrow(
-            "days must be an integer.",
-        );
-    });
+  it("throws when addUtcCalendarDays gets non-integer days", () => {
+    expect(() => addUtcCalendarDays("2026-06-09T15:34:00.000Z", 1.2)).toThrow(
+      "days must be an integer.",
+    );
+  });
 });
 
 describe("IdentityPolicyEngine - config validation", () => {
-    it("throws when maxLength is lower than minLength", () => {
-        expect(() => {
-            new IdentityPolicyEngine({
-                minLength: 10,
-                maxLength: 8,
-                persistence: createPersistenceMock(),
-            });
-        }).toThrow("maxLength must be greater than or equal to minLength.");
-    });
+  it("throws when maxLength is lower than minLength", () => {
+    expect(() => {
+      new IdentityPolicyEngine({
+        minLength: 10,
+        maxLength: 8,
+        persistence: createPersistenceMock(),
+      });
+    }).toThrow("maxLength must be greater than or equal to minLength.");
+  });
 
-    it("throws when minimumPasswordAgeDays is negative", () => {
-        expect(() => {
-            new IdentityPolicyEngine({
-                minimumPasswordAgeDays: -1,
-                persistence: createPersistenceMock(),
-            });
-        }).toThrow("minimumPasswordAgeDays must be a non-negative integer.");
-    });
+  it("throws when minimumPasswordAgeDays is negative", () => {
+    expect(() => {
+      new IdentityPolicyEngine({
+        minimumPasswordAgeDays: -1,
+        persistence: createPersistenceMock(),
+      });
+    }).toThrow("minimumPasswordAgeDays must be a non-negative integer.");
+  });
 
-    it("throws when previous-secret substring blocking is enabled without the required callback", () => {
-        expect(() => {
-            new IdentityPolicyEngine({
-                blockSubstringsFromPreviousSecrets: true,
-                persistence: {
-                    getPasswordHistory: async () => [],
-                    saveNewPassword: async () => undefined,
-                },
-            });
-        }).toThrow(
-            "getPreviousPasswordSubstrings persistence callback is required when blockSubstringsFromPreviousSecrets is enabled.",
-        );
-    });
+  it("throws when previous-secret substring blocking is enabled without the required callback", () => {
+    expect(() => {
+      new IdentityPolicyEngine({
+        blockSubstringsFromPreviousSecrets: true,
+        persistence: {
+          getPasswordHistory: async () => [],
+          saveNewPassword: async () => undefined,
+        },
+      });
+    }).toThrow(
+      "getPreviousPasswordSubstrings persistence callback is required when blockSubstringsFromPreviousSecrets is enabled.",
+    );
+  });
 
-    it("throws when gracePeriodDays is negative", () => {
-        expect(() => {
-            new IdentityPolicyEngine({
-                gracePeriodDays: -1,
-                persistence: createPersistenceMock(),
-            });
-        }).toThrow("gracePeriodDays must be a non-negative integer.");
-    });
+  it("throws when gracePeriodDays is negative", () => {
+    expect(() => {
+      new IdentityPolicyEngine({
+        gracePeriodDays: -1,
+        persistence: createPersistenceMock(),
+      });
+    }).toThrow("gracePeriodDays must be a non-negative integer.");
+  });
 
-    it("throws when expiryWarningDays is negative", () => {
-        expect(() => {
-            new IdentityPolicyEngine({
-                expiryWarningDays: -1,
-                persistence: createPersistenceMock(),
-            });
-        }).toThrow("expiryWarningDays must be a non-negative integer.");
-    });
+  it("throws when expiryWarningDays is negative", () => {
+    expect(() => {
+      new IdentityPolicyEngine({
+        expiryWarningDays: -1,
+        persistence: createPersistenceMock(),
+      });
+    }).toThrow("expiryWarningDays must be a non-negative integer.");
+  });
 });
