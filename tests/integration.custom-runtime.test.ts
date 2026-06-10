@@ -31,9 +31,17 @@ function createResponse(): CustomResponse {
 }
 
 async function runCustomPipeline(
-  middleware: (request: CustomRequest, response: CustomResponse, next: (err?: unknown) => void) => Promise<void>,
+  middleware: (
+    request: CustomRequest,
+    response: CustomResponse,
+    next: (err?: unknown) => void,
+  ) => Promise<void>,
   request: CustomRequest,
-): Promise<{ proceeded: boolean; response: CustomResponse; nextError?: unknown }> {
+): Promise<{
+  proceeded: boolean;
+  response: CustomResponse;
+  nextError?: unknown;
+}> {
   const response = createResponse();
   let proceeded = false;
   let nextError: unknown;
@@ -60,7 +68,10 @@ describe("integration example - custom runtime", () => {
       },
     });
 
-    const middleware = createStatusJsonExpiryMiddleware<CustomRequest, CustomResponse>({
+    const middleware = createStatusJsonExpiryMiddleware<
+      CustomRequest,
+      CustomResponse
+    >({
       getUserIdAndDateFn: async (req) => ({
         userId: req.auth.userId,
         passwordCreatedAt: new Date(req.auth.passwordCreatedAt),
@@ -90,7 +101,10 @@ describe("integration example - custom runtime", () => {
       },
     });
 
-    const middleware = createStatusJsonExpiryMiddleware<CustomRequest, CustomResponse>({
+    const middleware = createStatusJsonExpiryMiddleware<
+      CustomRequest,
+      CustomResponse
+    >({
       getUserIdAndDateFn: async (req) => ({
         userId: req.auth.userId,
         passwordCreatedAt: new Date(req.auth.passwordCreatedAt),
