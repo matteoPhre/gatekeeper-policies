@@ -217,10 +217,20 @@ These examples are intended as implementation references and do not introduce fr
 `validateComplexity(password)` returns:
 
 ```ts
-{ isValid: boolean; errors: string[]; issues?: Array<{ code: string; message: string }> }
+{ isValid: boolean; errors: string[]; issues?: Array<{ code: string; message: string; meta?: Record<string, unknown> }> }
 ```
 
-`errors` stays for human-readable output; `issues` adds stable machine-readable codes for host-side mapping and logging.
+`errors` stays for human-readable output; `issues` adds stable machine-readable codes for host-side mapping and logging, while `meta` carries rule-specific context (for example required thresholds and measured values).
+
+For intrinsic complexity extensions, `validateComplexityWithExtensions(password)` applies optional host-managed validators:
+
+- `entropyValidator({ password, normalizedPassword })`
+- `compromisedPasswordValidator({ password, normalizedPassword })`
+
+The engine also provides adapters:
+
+- `createScoreBasedEntropyValidator(scoreFn, minimumScore)` for zxcvbn-compatible score sources
+- `createCompromisedPasswordDictionaryValidator(dictionary)` for local compromised dictionaries
 
 ### 3. Rotation Validation
 
