@@ -294,6 +294,39 @@ const complexity = engine.validateComplexity("StrongPassword#2026");
 const expired = engine.isPasswordExpired("2026-03-01T00:00:00.000Z");
 ```
 
+### Intrinsic Complexity Extensions Example
+
+```ts
+import {
+	createCompromisedPasswordDictionaryValidator,
+	createScoreBasedEntropyValidator,
+	IdentityPolicyEngine,
+} from "@matteophre/gatekeeper-policies";
+
+const engine = new IdentityPolicyEngine({
+	persistence: {
+		async getPasswordHistory() {
+			return [];
+		},
+		async saveNewPassword() {
+			return;
+		},
+	},
+	entropyValidator: createScoreBasedEntropyValidator(async (password) => {
+		// Plug your zxcvbn-like scoring source here (0..4 for example)
+		return password.length > 14 ? 4 : 2;
+	}, 3),
+	compromisedPasswordValidator: createCompromisedPasswordDictionaryValidator([
+		"password123",
+		"letmein",
+		"strongpassword#2026",
+	]),
+});
+
+const result = await engine.validateComplexityWithExtensions("StrongPassword#2026");
+// result.issues includes PASSWORD_ENTROPY_TOO_LOW and/or PASSWORD_COMPROMISED when triggered
+```
+
 ### HTTP Pipeline Integration
 
 The library provides generic primitives:
@@ -313,6 +346,7 @@ They can be attached to any framework that offers compatible request/response co
 | constructor | `new IdentityPolicyEngine(options)` | Creates an engine instance with policy settings and persistence callbacks. |
 | getConfig | `getConfig(): Readonly<ResolvedIdentityPolicyEngineOptions>` | Returns the resolved runtime configuration (defaults applied). |
 | validateComplexity | `validateComplexity(password: string): { isValid: boolean; errors: string[] }` | Evaluates password complexity against the active policy. |
+| validateComplexityWithExtensions | `validateComplexityWithExtensions(password: string): Promise<{ isValid: boolean; errors: string[]; issues?: PasswordValidationIssue[] }>` | Evaluates base complexity and optional intrinsic complexity extensions (`entropyValidator`, `compromisedPasswordValidator`). |
 | validateRotation | `validateRotation(plainPassword: string, userId: string, comparator: PasswordCompareFn | PasswordHistoryComparisonStrategy): Promise<boolean>` | Prevents password reuse by comparing candidate value with historical hashes or a caller-provided strategy object. |
 | isMinimumPasswordAgeSatisfied | `isMinimumPasswordAgeSatisfied(passwordCreatedAt: Date | string): boolean` | Enforces the optional minimum-age requirement before a password can be changed. |
 | isPasswordExpired | `isPasswordExpired(passwordCreatedAt: Date | string): boolean` | Checks whether password age exceeds configured expiry window. |
@@ -331,6 +365,8 @@ Audit events are emitted with these `type` values: `complexity`, `rotation`, `ex
 | toUtcStartOfDay | `toUtcStartOfDay(value: Date | string): Date` | Normalizes a timestamp to UTC midnight (`00:00:00.000Z`) for calendar-safe policy checks. |
 | addUtcCalendarDays | `addUtcCalendarDays(value: Date | string, days: number): Date` | Adds whole calendar days in UTC semantics, avoiding local timezone drift. |
 | daysBetweenUtcCalendarDates | `daysBetweenUtcCalendarDates(start: Date | string, end: Date | string): number` | Returns day difference between UTC-normalized calendar dates. |
+| createScoreBasedEntropyValidator | `createScoreBasedEntropyValidator(scoreFn, minimumScore): PasswordEntropyValidator` | Wraps score providers (zxcvbn-compatible) into the intrinsic complexity validator contract. |
+| createCompromisedPasswordDictionaryValidator | `createCompromisedPasswordDictionaryValidator(dictionary): PasswordCompromisedPasswordValidator` | Creates a local dictionary-based compromised-password validator for host-managed checks. |
 | evaluatePasswordExpiry | `evaluatePasswordExpiry(request, options): Promise<{ expired: boolean; subject: PasswordSubjectContext; expiredResult?: TExpiredResult }>` | Evaluates expiry in a transport-agnostic pipeline and invokes `onExpired` when needed. |
 
 ### Transport Factories
@@ -349,6 +385,9 @@ Important contracts are defined in `src/interfaces.ts`:
 - `IdentityPolicyEngineOptions`
 - `PasswordAuditEvent`
 - `PasswordAuditEventCallback`
+- `PasswordEntropyValidator`
+- `PasswordCompromisedPasswordValidator`
+- `PasswordValidationIssue`
 - `PasswordCompareFn`
 - `PasswordHistoryComparator`
 - `PasswordHistoryComparisonStrategy`
