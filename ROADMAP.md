@@ -28,9 +28,9 @@ This roadmap focuses on strengthening policy controls while preserving the curre
 
 1. [x] Add optional audit event callbacks for compliance logging.
 2. [x] Add structured error codes across validations.
-3. Add constant-time utility helpers for safer comparisons when needed.
-4. Add threat-focused examples for brute-force and credential-stuffing controls.
-5. Add typed validation outcomes for policy violations (e.g. `{ valid: false, reason, details }`) while preserving backward compatibility only when it keeps the design clean (no compatibility spaghetti); if required, introduce explicit versioned APIs with clear deprecation/migration notes.
+3. [x] Add constant-time utility helpers for safer comparisons when needed.
+4. [x] Add threat-focused examples for brute-force and credential-stuffing controls.
+5. [x] Add typed validation outcomes for policy violations (e.g. `{ valid: false, reason, details }`) while preserving backward compatibility only when it keeps the design clean (no compatibility spaghetti); if required, introduce explicit versioned APIs with clear deprecation/migration notes.
 
 ## Phase 5 - Advanced Validation and Security Integrations
 
