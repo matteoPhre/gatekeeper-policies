@@ -12,6 +12,11 @@
       "default": "./dist/index.js"
     }
   },
+  "repository": {
+  "type": "git",
+  "url": "https://github.com/matteoPhre/gatekeeper-policies.git"
+  
+},
   "files": [
     "dist"
   ],
