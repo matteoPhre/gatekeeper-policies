@@ -3,3 +3,4 @@ export * from "./policy/engine.js";
 export * from "./adapters/http-adapters.js";
 export * from "./utils/constant-time.js";
 export { IdentityPolicyEngine } from "./policy/identity-policy-engine.js";
+export * as PolicyCore from "./policy-core.js";
