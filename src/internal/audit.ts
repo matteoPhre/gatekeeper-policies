@@ -1,7 +1,7 @@
 import type {
   PasswordAuditEvent,
   PasswordAuditEventCallback,
-} from "./interfaces";
+} from "../types/interfaces.js";
 
 export function emitAuditEvent(
   callback: PasswordAuditEventCallback | undefined,

@@ -12,19 +12,26 @@ Persistence and request extraction are delegated to the host application through
 ## Scope
 
 The current implementation covers:
-- password complexity validation
+- password complexity validation (with structured issue codes)
 - password rotation against history hashes
-- password expiry evaluation
+- password expiry evaluation (including warning and grace states)
 - HTTP-agnostic middleware/hook factories
+- constant-time comparison helpers for host-managed secret checks
+- typed validation outcomes for policy violations
 
 ## Architecture
 
-The project is split into three core modules:
-- `src/interfaces.ts`: public contracts, options, and callback types
-- `src/engine.ts`: pure business logic (`IdentityPolicyEngine`)
-- `src/http-adapters.ts`: transport helpers for request pipeline integration
+The project is split into logical modules under `src/`:
+- `src/types/interfaces.ts`: public contracts, options, and callback types
+- `src/policy/engine.ts`: pure policy utilities, validators, and option resolution
+- `src/policy/identity-policy-engine.ts`: orchestration class (`IdentityPolicyEngine`)
+- `src/utils/constant-time.ts`: timing-safe comparison helpers
+- `src/adapters/http-adapters.ts`: transport helpers for request pipeline integration
 
-An index entrypoint exports all modules:
+Internal helpers (not part of the public surface, but relevant to behavior):
+- `src/internal/audit.ts`: fire-and-forget audit event dispatch used by the engine
+
+An index entrypoint exports all public modules:
 - `src/index.ts`
 
 ## Installation
@@ -63,27 +70,21 @@ Available scripts:
 
 ## Versioning
 
-This project follows Semantic Versioning with a practical rule for early releases:
+This project follows [Semantic Versioning](https://semver.org/):
 
-- `0.y.z`: initial development phase, breaking changes can happen on minor bumps
-- `1.0.0+`: stable API contract, breaking changes only on major bumps
+- `1.x.x`: stable public API; breaking changes only on major bumps
+- patch releases: bug fixes and backward-compatible documentation or test updates
+- minor releases: backward-compatible features
 
-Current baseline release target:
-
-- `0.0.2`: first tagged public baseline for scoped npm publish
+Current published version: see `package.json`.
 
 Suggested release flow:
 
 ```bash
-npm version patch
+npm run release:check
+npm version patch   # or minor / major
 git push origin main --follow-tags
-```
-
-Or manually for the first baseline tag:
-
-```bash
-git tag -a v0.0.2 -m "release: v0.0.2"
-git push origin v0.0.2
+npm run publish:npm
 ```
 
 Releases are currently published manually from a trusted local environment.
@@ -175,6 +176,7 @@ Reference examples are available in test files:
 
 - Express and Fastify integration: `tests/integration.frameworks.test.ts`
 - Custom runtime integration: `tests/integration.custom-runtime.test.ts`
+- Brute-force and credential-stuffing patterns: `tests/phase4-security.test.ts`
 
 These examples are intended as implementation references and do not introduce framework coupling in the core library.
 
@@ -209,6 +211,8 @@ These examples are intended as implementation references and do not introduce fr
 - `persistence.saveNewPassword(userId, newHash)`
 - `persistence.getPreviousPasswordSubstrings(userId)` when substring blocking is enabled
 - `auditEventCallback(event)` for compliance logging and observability hooks
+- `entropyValidator(context)` for optional host-managed entropy/strength checks
+- `compromisedPasswordValidator(context)` for optional host-managed breach checks
 
 `auditEventCallback` is optional and fire-and-forget: the engine clones each event before invoking the callback and ignores callback failures so validation behavior stays deterministic.
 
@@ -265,6 +269,25 @@ When `blockSubstringsFromPreviousSecrets` is enabled, the engine also checks `pe
 ### 5. Minimum Password Age
 
 `isMinimumPasswordAgeSatisfied(passwordCreatedAt)` accepts `Date | string` and enforces the optional `minimumPasswordAgeDays` policy before allowing a password change.
+
+### 6. Typed Validation Outcomes
+
+In addition to the boolean/string-based APIs above, the engine exposes additive outcome helpers that return structured `{ valid: true }` or `{ valid: false, reason, details }` shapes (complexity uses `reasons[]` because multiple rules can fail at once):
+
+- `evaluateComplexityOutcome(password)` → `PasswordComplexityValidationOutcome`
+- `evaluateRotationOutcome(plainPassword, userId, comparator)` → `PasswordRotationValidationOutcome`
+- `evaluateMinimumPasswordAgeOutcome(passwordCreatedAt)` → `MinimumPasswordAgeValidationOutcome`
+
+Existing methods (`validateComplexity`, `validateRotation`, `isMinimumPasswordAgeSatisfied`, …) are unchanged.
+
+### 7. Security Utilities
+
+For host-managed secret or token comparisons, the library exports timing-safe helpers backed by Node.js `crypto.timingSafeEqual`:
+
+- `constantTimeEqual(left, right)` for `string | Uint8Array` values
+- `constantTimeStringEqual(left, right)` for UTF-8 string values
+
+These utilities live in `src/utils/constant-time.ts` and are intentionally generic: use them in your auth layer, not inside core policy rules.
 
 ## Usage
 
@@ -327,6 +350,37 @@ const result = await engine.validateComplexityWithExtensions("StrongPassword#202
 // result.issues includes PASSWORD_ENTROPY_TOO_LOW and/or PASSWORD_COMPROMISED when triggered
 ```
 
+### Typed Outcome Example
+
+```ts
+import { IdentityPolicyEngine } from "@matteophre/gatekeeper-policies";
+
+const engine = new IdentityPolicyEngine({
+  persistence: {
+    async getPasswordHistory() {
+      return [];
+    },
+    async saveNewPassword() {
+      return;
+    },
+  },
+});
+
+const complexityOutcome = engine.evaluateComplexityOutcome("short");
+if (!complexityOutcome.valid) {
+  console.log(complexityOutcome.reasons.map((issue) => issue.code));
+}
+
+const rotationOutcome = await engine.evaluateRotationOutcome(
+  "candidate",
+  "user-123",
+  async () => false,
+);
+if (!rotationOutcome.valid) {
+  console.log(rotationOutcome.reason, rotationOutcome.details);
+}
+```
+
 ### HTTP Pipeline Integration
 
 The library provides generic primitives:
@@ -345,10 +399,13 @@ They can be attached to any framework that offers compatible request/response co
 | --- | --- | --- |
 | constructor | `new IdentityPolicyEngine(options)` | Creates an engine instance with policy settings and persistence callbacks. |
 | getConfig | `getConfig(): Readonly<ResolvedIdentityPolicyEngineOptions>` | Returns the resolved runtime configuration (defaults applied). |
-| validateComplexity | `validateComplexity(password: string): { isValid: boolean; errors: string[] }` | Evaluates password complexity against the active policy. |
-| validateComplexityWithExtensions | `validateComplexityWithExtensions(password: string): Promise<{ isValid: boolean; errors: string[]; issues?: PasswordValidationIssue[] }>` | Evaluates base complexity and optional intrinsic complexity extensions (`entropyValidator`, `compromisedPasswordValidator`). |
+| validateComplexity | `validateComplexity(password: string): ComplexityValidationResult` | Evaluates password complexity against the active policy. |
+| evaluateComplexityOutcome | `evaluateComplexityOutcome(password: string): PasswordComplexityValidationOutcome` | Returns a typed success/failure outcome for complexity validation. |
+| validateComplexityWithExtensions | `validateComplexityWithExtensions(password: string): Promise<ComplexityValidationResult>` | Evaluates base complexity and optional intrinsic complexity extensions (`entropyValidator`, `compromisedPasswordValidator`). |
 | validateRotation | `validateRotation(plainPassword: string, userId: string, comparator: PasswordCompareFn | PasswordHistoryComparisonStrategy): Promise<boolean>` | Prevents password reuse by comparing candidate value with historical hashes or a caller-provided strategy object. |
+| evaluateRotationOutcome | `evaluateRotationOutcome(plainPassword: string, userId: string, comparator: PasswordCompareFn | PasswordHistoryComparisonStrategy): Promise<PasswordRotationValidationOutcome>` | Returns a typed success/failure outcome for rotation validation. |
 | isMinimumPasswordAgeSatisfied | `isMinimumPasswordAgeSatisfied(passwordCreatedAt: Date | string): boolean` | Enforces the optional minimum-age requirement before a password can be changed. |
+| evaluateMinimumPasswordAgeOutcome | `evaluateMinimumPasswordAgeOutcome(passwordCreatedAt: Date | string): MinimumPasswordAgeValidationOutcome` | Returns a typed success/failure outcome for minimum-age enforcement. |
 | isPasswordExpired | `isPasswordExpired(passwordCreatedAt: Date | string): boolean` | Checks whether password age exceeds configured expiry window. |
 | daysUntilExpiry | `daysUntilExpiry(passwordCreatedAt: Date | string): number` | Returns remaining days before expiry, clamped to `0` when already expired. |
 | isWithinGracePeriod | `isWithinGracePeriod(passwordCreatedAt: Date | string): boolean` | Returns whether the password is expired and still within the configured grace period. |
@@ -367,6 +424,10 @@ Audit events are emitted with these `type` values: `complexity`, `rotation`, `ex
 | daysBetweenUtcCalendarDates | `daysBetweenUtcCalendarDates(start: Date | string, end: Date | string): number` | Returns day difference between UTC-normalized calendar dates. |
 | createScoreBasedEntropyValidator | `createScoreBasedEntropyValidator(scoreFn, minimumScore): PasswordEntropyValidator` | Wraps score providers (zxcvbn-compatible) into the intrinsic complexity validator contract. |
 | createCompromisedPasswordDictionaryValidator | `createCompromisedPasswordDictionaryValidator(dictionary): PasswordCompromisedPasswordValidator` | Creates a local dictionary-based compromised-password validator for host-managed checks. |
+| createBulkPasswordHistoryComparisonStrategy | `createBulkPasswordHistoryComparisonStrategy(compareFn): PasswordHistoryComparisonStrategy` | Adapts a bulk history comparison callback into a rotation strategy. |
+| normalizePasswordInput | `normalizePasswordInput(value, config): string` | Applies configured trim/unicode normalization before policy evaluation. |
+| constantTimeEqual | `constantTimeEqual(left, right): boolean` | Compares `string | Uint8Array` values in constant time. |
+| constantTimeStringEqual | `constantTimeStringEqual(left, right): boolean` | Compares UTF-8 strings in constant time. |
 | evaluatePasswordExpiry | `evaluatePasswordExpiry(request, options): Promise<{ expired: boolean; subject: PasswordSubjectContext; expiredResult?: TExpiredResult }>` | Evaluates expiry in a transport-agnostic pipeline and invokes `onExpired` when needed. |
 
 ### Transport Factories
@@ -378,16 +439,22 @@ Audit events are emitted with these `type` values: `complexity`, `rotation`, `ex
 
 ### Core Type Contracts
 
-Important contracts are defined in `src/interfaces.ts`:
+Important contracts are defined in `src/types/interfaces.ts`:
 
 - `PasswordPolicyConfig`
 - `PasswordPersistenceCallbacks`
 - `IdentityPolicyEngineOptions`
+- `ResolvedIdentityPolicyEngineOptions`
 - `PasswordAuditEvent`
 - `PasswordAuditEventCallback`
 - `PasswordEntropyValidator`
 - `PasswordCompromisedPasswordValidator`
 - `PasswordValidationIssue`
+- `ComplexityValidationResult`
+- `PolicyValidationOutcome`
+- `PasswordComplexityValidationOutcome`
+- `PasswordRotationValidationOutcome`
+- `MinimumPasswordAgeValidationOutcome`
 - `PasswordCompareFn`
 - `PasswordHistoryComparator`
 - `PasswordHistoryComparisonStrategy`
@@ -401,6 +468,8 @@ Important contracts are defined in `src/interfaces.ts`:
 The repository includes:
 
 - unit tests for engine behavior: `tests/engine.test.ts`
+- unit tests for timing-safe helpers: `tests/constant-time.test.ts`
+- reference examples for threat controls: `tests/phase4-security.test.ts`
 - unit tests for transport helpers: `tests/http-adapters.unit.test.ts`
 - integration examples with real frameworks: `tests/integration.frameworks.test.ts`
 - integration example with a custom runtime: `tests/integration.custom-runtime.test.ts`
