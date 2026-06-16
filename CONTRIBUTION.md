@@ -14,7 +14,7 @@ By participating in this project, you agree to maintain a professional, respectf
 
 ### Local Setup
 1. Fork the repository and clone it locally:
-   git clone [https://github.com/](https://github.com/)<your-username>/gatekeeper-policies.git
+   git clone `'https://github.com/matteoPhre/gatekeeper-policies.git'`
    cd gatekeeper-policies
 
 2. Install the dependencies:
