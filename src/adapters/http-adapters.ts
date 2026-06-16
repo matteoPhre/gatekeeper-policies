@@ -9,7 +9,7 @@ import {
   type PipelineNextFn,
   type StatusJsonExpiryMiddleware,
   type StatusJsonResponseLike,
-} from "./interfaces";
+} from "../types/interfaces.js";
 
 const EXPIRED_PAYLOAD: ExpiryRejectionPayload = { code: "PASSWORD_EXPIRED" };
 

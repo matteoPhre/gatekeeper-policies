@@ -230,3 +230,40 @@ export type CodeSendExpiryHook<
   TRequest = unknown,
   TReply extends CodeSendReplyLike = CodeSendReplyLike,
 > = (request: TRequest, reply: TReply) => Promise<void>;
+
+export interface ResolvedIdentityPolicyEngineOptions extends Required<PasswordPolicyConfig> {
+  persistence: PasswordPersistenceCallbacks;
+  auditEventCallback?: PasswordAuditEventCallback;
+  entropyValidator?: PasswordEntropyValidator;
+  compromisedPasswordValidator?: PasswordCompromisedPasswordValidator;
+}
+
+export type PolicyValidationSuccess = { valid: true };
+
+export type PolicyValidationFailure<TReason extends string> = {
+  valid: false;
+  reason: TReason;
+  details?: Record<string, unknown>;
+};
+
+export type PolicyValidationOutcome<TReason extends string> =
+  | PolicyValidationSuccess
+  | PolicyValidationFailure<TReason>;
+
+export type PasswordRotationFailureReason =
+  | "PASSWORD_REUSED"
+  | "PASSWORD_CONTAINS_PREVIOUS_SUBSTRING";
+
+export type PasswordRotationValidationOutcome =
+  PolicyValidationOutcome<PasswordRotationFailureReason>;
+
+export type MinimumPasswordAgeFailureReason = "MINIMUM_PASSWORD_AGE_NOT_SATISFIED";
+
+export type MinimumPasswordAgeValidationOutcome =
+  PolicyValidationOutcome<MinimumPasswordAgeFailureReason>;
+
+export type PasswordComplexityValidationOutcome = PolicyValidationSuccess | {
+  valid: false;
+  reasons: PasswordValidationIssue[];
+  details?: Record<string, unknown>;
+};

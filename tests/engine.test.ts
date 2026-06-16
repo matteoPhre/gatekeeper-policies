@@ -5,14 +5,14 @@ import {
   createBulkPasswordHistoryComparisonStrategy,
   createScoreBasedEntropyValidator,
   daysBetweenUtcCalendarDates,
-  IdentityPolicyEngine,
   normalizePasswordCreatedAt,
   toUtcStartOfDay,
-} from "../src/engine";
+} from "../src/policy/engine.js";
 import type {
   PasswordAuditEvent,
   PasswordPersistenceCallbacks,
-} from "../src/interfaces";
+} from "../src/types/interfaces.js";
+import { IdentityPolicyEngine } from "../src/policy/identity-policy-engine.js";
 
 function createPersistenceMock(
   history: string[] = [],
