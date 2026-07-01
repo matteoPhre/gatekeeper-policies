@@ -6,6 +6,7 @@ import {
   PasswordRotationEngine,
   type PasswordRule,
 } from "../src/policy-core";
+import { IdentityPolicyEngine as LegacyIdentityPolicyEngine } from "../src/policy/identity-policy-engine.js";
 
 const baseComplexityConfig = {
   minLength: 12,
@@ -71,5 +72,20 @@ describe("policy-core architecture", () => {
     const result = await engine.validateComplexity("StrongPassword#2026");
 
     expect(result.success).toBe(true);
+  });
+
+  it("freezes resolved legacy config at runtime", () => {
+    const engine = new LegacyIdentityPolicyEngine({
+      persistence: {
+        getPasswordHistory: async () => [],
+        saveNewPassword: async () => undefined,
+      },
+      denyList: ["Password123"],
+    });
+
+    const config = engine.getConfig();
+
+    expect(Object.isFrozen(config)).toBe(true);
+    expect(Object.isFrozen(config.denyList)).toBe(true);
   });
 });

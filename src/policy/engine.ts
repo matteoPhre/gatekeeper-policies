@@ -155,6 +155,21 @@ export function daysBetweenUtcCalendarDates(
   return Math.round((utcEnd - utcStart) / MS_PER_DAY);
 }
 
+function deepFreeze<T>(value: T): T {
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+
+  for (const key of Object.keys(value as Record<string, unknown>)) {
+    const nested = (value as Record<string, unknown>)[key];
+    if (typeof nested === "object" && nested !== null) {
+      deepFreeze(nested);
+    }
+  }
+
+  return Object.freeze(value);
+}
+
 export function resolveEngineOptions(
   options: IdentityPolicyEngineOptions,
 ): ResolvedIdentityPolicyEngineOptions {
@@ -303,7 +318,7 @@ export function resolveEngineOptions(
     );
   }
 
-  return config;
+  return deepFreeze(config);
 }
 
 export function isInDenyList(
