@@ -214,7 +214,7 @@ These examples are intended as implementation references and do not introduce fr
 - `entropyValidator(context)` for optional host-managed entropy/strength checks
 - `compromisedPasswordValidator(context)` for optional host-managed breach checks
 
-`auditEventCallback` is optional and fire-and-forget: the engine clones each event before invoking the callback and ignores callback failures so validation behavior stays deterministic.
+`auditEventCallback` is optional and fire-and-forget: the engine clones each event before invoking the callback, enriches it with `policyVersion` and `timestamp`, and ignores callback failures so validation behavior stays deterministic.
 
 ### 2. Complexity Validation
 
