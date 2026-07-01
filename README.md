@@ -479,6 +479,7 @@ The repository includes:
 - unit tests for transport helpers: `tests/http-adapters-unit.test.ts`
 - integration examples with real frameworks: `tests/integration-frameworks.test.ts`
 - integration example with a custom runtime: `tests/integration-custom-runtime.test.ts`
+- contract tests for extension interfaces and comparator adapters: `tests/contracts.test.ts`
 
 Current status:
 - all tests pass with Vitest
