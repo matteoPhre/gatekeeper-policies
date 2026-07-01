@@ -88,4 +88,80 @@ describe("policy-core architecture", () => {
     expect(Object.isFrozen(config)).toBe(true);
     expect(Object.isFrozen(config.denyList)).toBe(true);
   });
+
+  it("fails closed when rotation dependencies throw", async () => {
+    const rotation = new PasswordRotationEngine(
+      {
+        historyLimit: 5,
+        blockSubstringsFromPreviousSecrets: false,
+        minPreviousSecretSubstringLength: 4,
+      },
+      {
+        getPasswordHistory: async () => {
+          throw new Error("rotation history unavailable");
+        },
+      },
+    );
+
+    const result = await rotation.evaluate(
+      "StrongPassword#2026",
+      "user-1",
+      async () => false,
+    );
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.reason).toBe("PASSWORD_REUSED");
+      expect(result.meta).toEqual({ failureMode: "fail_closed" });
+    }
+  });
+
+  it("fails open when rotation dependencies throw and fail-open is enabled", async () => {
+    const rotation = new PasswordRotationEngine(
+      {
+        historyLimit: 5,
+        blockSubstringsFromPreviousSecrets: false,
+        minPreviousSecretSubstringLength: 4,
+      },
+      {
+        getPasswordHistory: async () => {
+          throw new Error("rotation history unavailable");
+        },
+      },
+      {
+        failureMode: "fail_open",
+      },
+    );
+
+    const result = await rotation.evaluate(
+      "StrongPassword#2026",
+      "user-1",
+      async () => false,
+    );
+
+    expect(result.success).toBe(true);
+  });
+
+  it("fails closed when expiry parsing fails", async () => {
+    const expiry = new PasswordExpiryEngine({ expiryDays: 90 });
+
+    const result = await expiry.evaluate("not-a-date");
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.reason).toBe("PASSWORD_EXPIRED");
+      expect(result.meta).toEqual({ failureMode: "fail_closed" });
+    }
+  });
+
+  it("fails open when expiry parsing fails and fail-open is enabled", async () => {
+    const expiry = new PasswordExpiryEngine(
+      { expiryDays: 90 },
+      { failureMode: "fail_open" },
+    );
+
+    const result = await expiry.evaluate("not-a-date");
+
+    expect(result.success).toBe(true);
+  });
 });
