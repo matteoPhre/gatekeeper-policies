@@ -451,6 +451,30 @@ describe("IdentityPolicyEngine - minimum password age", () => {
     vi.useRealTimers();
   });
 
+  it("exposes typed minimum-age decision helpers", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+    const engine = new IdentityPolicyEngine({
+      minimumPasswordAgeDays: 7,
+      persistence: createPersistenceMock(),
+    });
+
+    expect(
+      engine.evaluateMinimumPasswordAgeDecision(
+        "2026-06-01T00:00:00.000Z",
+      ),
+    ).toEqual({
+      valid: false,
+      reason: "MINIMUM_PASSWORD_AGE_NOT_SATISFIED",
+      details: {
+        minimumPasswordAgeDays: 7,
+      },
+    });
+
+    vi.useRealTimers();
+  });
+
   it("blocks password change when minimum age has not been reached", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
@@ -499,6 +523,26 @@ describe("IdentityPolicyEngine - expiry", () => {
     const expired = engine.isPasswordExpired("2026-03-07T00:00:00.000Z");
 
     expect(expired).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it("exposes typed expiry decision helpers", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-05T00:00:00.000Z"));
+
+    const engine = new IdentityPolicyEngine({
+      expiryDays: 90,
+      persistence: createPersistenceMock(),
+    });
+
+    expect(
+      engine.evaluatePasswordExpiryDecision("2026-03-07T00:00:00.000Z"),
+    ).toEqual({ valid: false, reason: "PASSWORD_EXPIRED" });
+
+    expect(
+      engine.evaluatePasswordExpiryDecision("2026-03-08T00:00:00.000Z"),
+    ).toEqual({ valid: true });
+
     vi.useRealTimers();
   });
 
