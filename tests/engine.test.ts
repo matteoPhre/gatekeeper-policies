@@ -229,6 +229,8 @@ describe("IdentityPolicyEngine - complexity", () => {
       expect.objectContaining({
         type: "complexity",
         outcome: "fail",
+        policyVersion: expect.any(String),
+        timestamp: expect.any(String),
       }),
     ]);
   });

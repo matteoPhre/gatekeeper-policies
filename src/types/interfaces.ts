@@ -69,6 +69,8 @@ export type PasswordAuditEventType =
 export interface PasswordAuditEvent {
   type: PasswordAuditEventType;
   userId?: string;
+  policyVersion: string;
+  timestamp: string;
   outcome: "pass" | "fail" | "info";
   details?: Record<string, unknown>;
 }
