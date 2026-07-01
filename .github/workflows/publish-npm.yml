@@ -54,33 +54,10 @@ jobs:
             exit 1
           fi
 
-      - name: Validate npm authentication
-        if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run) }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        shell: bash
-        run: |
-          if [[ -n "${NODE_AUTH_TOKEN:-}" ]]; then
-            npm whoami
-            npm owner ls @matteophre/gatekeeper-policies
-          else
-            echo "NPM_TOKEN not configured; will rely on OIDC trusted publishing"
-          fi
-
       - name: Publish package (dry-run)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         run: npm publish --dry-run --access public
 
       - name: Publish package
         if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run) }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        shell: bash
-        run: |
-          if [[ -n "${NODE_AUTH_TOKEN:-}" ]]; then
-            echo "Publishing with NPM_TOKEN"
-            npm publish --access public
-          else
-            echo "Publishing with OIDC trusted publishing"
-            npm publish --access public --provenance
-          fi
+        run: npm publish --access public --provenance
