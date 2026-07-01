@@ -2,6 +2,24 @@ export type PasswordCreatedAtInput = Date | string;
 
 export type PasswordUnicodeNormalizationForm = "NFC" | "NFD" | "NFKC" | "NFKD";
 
+export type PolicyDecision<TReason extends string = string> =
+  | { success: true }
+  | {
+      success: false;
+      reason: TReason;
+      meta?: Readonly<Record<string, unknown>>;
+    };
+
+export type PolicyTraceStep = {
+  step: string;
+  success: boolean;
+  meta?: Readonly<Record<string, unknown>>;
+};
+
+export type PolicyEvaluationResult<TReason extends string> = PolicyDecision<TReason> & {
+  trace?: PolicyTraceStep[];
+};
+
 export interface PasswordPolicyConfig {
   minLength?: number;
   maxLength?: number;
