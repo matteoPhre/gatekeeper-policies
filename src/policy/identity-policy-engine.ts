@@ -10,19 +10,23 @@ import type {
   PasswordRotationValidationOutcome,
   ResolvedIdentityPolicyEngineOptions,
 } from "../types/interfaces.js";
-import { emitAuditEvent } from "../internal/audit.js";
-import {
-  hasBlockedPreviousSecretSubstring,
-  isPasswordCompareFn,
-  MS_PER_DAY,
-  normalizePasswordCreatedAt,
-  normalizePasswordInput,
-  resolveEngineOptions,
-} from "./engine.js";
+import { resolveEngineOptions } from "./engine.js";
 import {
   validateLegacyComplexity,
   validateLegacyComplexityWithExtensions,
 } from "./legacy-complexity.js";
+import {
+  daysRemainingInGracePeriodLegacy,
+  daysUntilExpiryLegacy,
+  evaluateLegacyExpiryState,
+  evaluateLegacyRotationOutcome,
+  evaluateMinimumPasswordAgeDecisionLegacy,
+  evaluateMinimumPasswordAgeOutcomeLegacy,
+  evaluatePasswordExpiryDecisionLegacy,
+  isMinimumPasswordAgeSatisfiedLegacy,
+  isPasswordExpiredLegacy,
+  isWithinGracePeriodLegacy,
+} from "./legacy-rotation-expiry.js";
 
 export class IdentityPolicyEngine {
   private readonly config: ResolvedIdentityPolicyEngineOptions;
@@ -68,124 +72,12 @@ export class IdentityPolicyEngine {
     userId: string,
     comparator: PasswordHistoryComparator,
   ): Promise<PasswordRotationValidationOutcome> {
-    const normalizedPlainPassword = normalizePasswordInput(
+    return evaluateLegacyRotationOutcome(
       plainPassword,
+      userId,
+      comparator,
       this.config,
     );
-
-    if (this.config.blockSubstringsFromPreviousSecrets) {
-      const previousSubstrings =
-        await this.config.persistence.getPreviousPasswordSubstrings?.(userId);
-
-      if (
-        hasBlockedPreviousSecretSubstring(
-          normalizedPlainPassword,
-          previousSubstrings,
-          this.config,
-        )
-      ) {
-        void emitAuditEvent(this.config.auditEventCallback, {
-          type: "rotation",
-          userId,
-          outcome: "fail",
-          details: {
-            mode: "previousSubstring",
-            historyLimit: this.config.historyLimit,
-          },
-        });
-
-        return {
-          valid: false,
-          reason: "PASSWORD_CONTAINS_PREVIOUS_SUBSTRING",
-          details: {
-            minPreviousSecretSubstringLength:
-              this.config.minPreviousSecretSubstringLength,
-          },
-        };
-      }
-    }
-
-    const history = await this.config.persistence.getPasswordHistory(userId);
-    const limitedHistory = history.slice(0, this.config.historyLimit);
-
-    if (!isPasswordCompareFn(comparator)) {
-      const isReused = await comparator.isReused({
-        userId,
-        plainPassword,
-        normalizedPassword: normalizedPlainPassword,
-        history: limitedHistory,
-        historyLimit: this.config.historyLimit,
-      });
-
-      if (isReused) {
-        void emitAuditEvent(this.config.auditEventCallback, {
-          type: "rotation",
-          userId,
-          outcome: "fail",
-          details: {
-            mode: "strategy",
-            historyLimit: this.config.historyLimit,
-          },
-        });
-
-        return {
-          valid: false,
-          reason: "PASSWORD_REUSED",
-          details: {
-            mode: "strategy",
-            historyLimit: this.config.historyLimit,
-          },
-        };
-      }
-
-      void emitAuditEvent(this.config.auditEventCallback, {
-        type: "rotation",
-        userId,
-        outcome: "pass",
-        details: {
-          mode: "strategy",
-          historyLimit: this.config.historyLimit,
-        },
-      });
-
-      return { valid: true };
-    }
-
-    for (const previousHash of limitedHistory) {
-      const isReused = await comparator(normalizedPlainPassword, previousHash);
-      if (isReused) {
-        void emitAuditEvent(this.config.auditEventCallback, {
-          type: "rotation",
-          userId,
-          outcome: "fail",
-          details: {
-            mode: "compareFn",
-            historyLimit: this.config.historyLimit,
-          },
-        });
-
-        return {
-          valid: false,
-          reason: "PASSWORD_REUSED",
-          details: {
-            mode: "compareFn",
-            historyLimit: this.config.historyLimit,
-          },
-        };
-      }
-    }
-
-    void emitAuditEvent(this.config.auditEventCallback, {
-      type: "rotation",
-      userId,
-      outcome: "pass",
-      details: {
-        mode: "compareFn",
-        historyLimit: this.config.historyLimit,
-      },
-    });
-
-    return { valid: true };
   }
 
   async validateRotation(
@@ -203,231 +95,50 @@ export class IdentityPolicyEngine {
   }
 
   isPasswordExpired(passwordCreatedAt: PasswordCreatedAtInput): boolean {
-    const createdAt = normalizePasswordCreatedAt(passwordCreatedAt);
-    const now = Date.now();
-    const ageInMs = now - createdAt.getTime();
-    const maxAgeInMs = this.config.expiryDays * MS_PER_DAY;
-
-    const expired = ageInMs >= maxAgeInMs;
-
-    void emitAuditEvent(this.config.auditEventCallback, {
-      type: "expiry",
-      outcome: expired ? "fail" : "pass",
-      details: {
-        expiryDays: this.config.expiryDays,
-      },
-    });
-
-    return expired;
+    return isPasswordExpiredLegacy(passwordCreatedAt, this.config);
   }
 
   daysUntilExpiry(passwordCreatedAt: PasswordCreatedAtInput): number {
-    const createdAt = normalizePasswordCreatedAt(passwordCreatedAt);
-    const now = Date.now();
-    const ageInMs = now - createdAt.getTime();
-    const maxAgeInMs = this.config.expiryDays * MS_PER_DAY;
-    const remainingMs = maxAgeInMs - ageInMs;
-
-    if (remainingMs <= 0) {
-      return 0;
-    }
-
-    const days = Math.ceil(remainingMs / MS_PER_DAY);
-
-    void emitAuditEvent(this.config.auditEventCallback, {
-      type: "expiry",
-      outcome: "info",
-      details: {
-        mode: "daysUntilExpiry",
-        days,
-      },
-    });
-
-    return days;
+    return daysUntilExpiryLegacy(passwordCreatedAt, this.config);
   }
 
   evaluateExpiryState(
     passwordCreatedAt: PasswordCreatedAtInput,
   ): PasswordExpiryStateResult {
-    const daysUntilExpiry = this.daysUntilExpiry(passwordCreatedAt);
-    const daysRemainingInGracePeriod =
-      this.daysRemainingInGracePeriod(passwordCreatedAt);
-
-    if (daysRemainingInGracePeriod > 0) {
-      const result: PasswordExpiryStateResult = {
-        state: "grace",
-        daysUntilExpiry,
-        daysRemainingInGracePeriod,
-      };
-
-      void emitAuditEvent(this.config.auditEventCallback, {
-        type: "gracePeriod",
-        outcome: "info",
-        details: {
-          state: result.state,
-          daysUntilExpiry: result.daysUntilExpiry,
-          daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
-        },
-      });
-
-      return result;
-    }
-
-    if (this.isPasswordExpired(passwordCreatedAt)) {
-      const result: PasswordExpiryStateResult = {
-        state: "expired",
-        daysUntilExpiry,
-        daysRemainingInGracePeriod,
-      };
-
-      void emitAuditEvent(this.config.auditEventCallback, {
-        type: "gracePeriod",
-        outcome: "info",
-        details: {
-          state: result.state,
-          daysUntilExpiry: result.daysUntilExpiry,
-          daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
-        },
-      });
-
-      return result;
-    }
-
-    if (
-      this.config.expiryWarningDays > 0 &&
-      daysUntilExpiry <= this.config.expiryWarningDays
-    ) {
-      const result: PasswordExpiryStateResult = {
-        state: "warning",
-        daysUntilExpiry,
-        daysRemainingInGracePeriod,
-      };
-
-      void emitAuditEvent(this.config.auditEventCallback, {
-        type: "expiry",
-        outcome: "info",
-        details: {
-          state: result.state,
-          daysUntilExpiry: result.daysUntilExpiry,
-          daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
-        },
-      });
-
-      return result;
-    }
-
-    const result: PasswordExpiryStateResult = {
-      state: "valid",
-      daysUntilExpiry,
-      daysRemainingInGracePeriod,
-    };
-
-    void emitAuditEvent(this.config.auditEventCallback, {
-      type: "expiry",
-      outcome: "pass",
-      details: {
-        state: result.state,
-        daysUntilExpiry: result.daysUntilExpiry,
-        daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
-      },
-    });
-
-    return result;
+    return evaluateLegacyExpiryState(passwordCreatedAt, this.config);
   }
 
   isWithinGracePeriod(passwordCreatedAt: PasswordCreatedAtInput): boolean {
-    if (
-      this.config.gracePeriodDays === 0 ||
-      !this.isPasswordExpired(passwordCreatedAt)
-    ) {
-      return false;
-    }
-
-    const createdAt = normalizePasswordCreatedAt(passwordCreatedAt);
-    const now = Date.now();
-    const ageInMs = now - createdAt.getTime();
-    const maxAgeInMs = this.config.expiryDays * MS_PER_DAY;
-    const graceWindowInMs = this.config.gracePeriodDays * MS_PER_DAY;
-    const elapsedSinceExpiryInMs = ageInMs - maxAgeInMs;
-
-    return elapsedSinceExpiryInMs <= graceWindowInMs;
+    return isWithinGracePeriodLegacy(passwordCreatedAt, this.config);
   }
 
   daysRemainingInGracePeriod(
     passwordCreatedAt: PasswordCreatedAtInput,
   ): number {
-    if (!this.isWithinGracePeriod(passwordCreatedAt)) {
-      return 0;
-    }
-
-    const createdAt = normalizePasswordCreatedAt(passwordCreatedAt);
-    const now = Date.now();
-    const ageInMs = now - createdAt.getTime();
-    const maxAgeInMs = this.config.expiryDays * MS_PER_DAY;
-    const graceWindowInMs = this.config.gracePeriodDays * MS_PER_DAY;
-    const remainingGraceInMs = maxAgeInMs + graceWindowInMs - ageInMs;
-
-    if (remainingGraceInMs <= 0) {
-      return 0;
-    }
-
-    return Math.ceil(remainingGraceInMs / MS_PER_DAY);
+    return daysRemainingInGracePeriodLegacy(passwordCreatedAt, this.config);
   }
 
   isMinimumPasswordAgeSatisfied(
     passwordCreatedAt: PasswordCreatedAtInput,
   ): boolean {
-    if (this.config.minimumPasswordAgeDays === 0) {
-      return true;
-    }
-
-    const createdAt = normalizePasswordCreatedAt(passwordCreatedAt);
-    const now = Date.now();
-    const ageInMs = now - createdAt.getTime();
-    const minimumAgeInMs = this.config.minimumPasswordAgeDays * MS_PER_DAY;
-
-    const satisfied = ageInMs >= minimumAgeInMs;
-
-    void emitAuditEvent(this.config.auditEventCallback, {
-      type: "minimumPasswordAge",
-      outcome: satisfied ? "pass" : "fail",
-      details: {
-        minimumPasswordAgeDays: this.config.minimumPasswordAgeDays,
-      },
-    });
-
-    return satisfied;
+    return isMinimumPasswordAgeSatisfiedLegacy(passwordCreatedAt, this.config);
   }
 
   evaluateMinimumPasswordAgeOutcome(
     passwordCreatedAt: PasswordCreatedAtInput,
   ): MinimumPasswordAgeValidationOutcome {
-    if (this.isMinimumPasswordAgeSatisfied(passwordCreatedAt)) {
-      return { valid: true };
-    }
-
-    return {
-      valid: false,
-      reason: "MINIMUM_PASSWORD_AGE_NOT_SATISFIED",
-      details: {
-        minimumPasswordAgeDays: this.config.minimumPasswordAgeDays,
-      },
-    };
+    return evaluateMinimumPasswordAgeOutcomeLegacy(passwordCreatedAt, this.config);
   }
 
   evaluatePasswordExpiryDecision(
     passwordCreatedAt: PasswordCreatedAtInput,
   ): PasswordExpiryValidationOutcome {
-    if (this.isPasswordExpired(passwordCreatedAt)) {
-      return { valid: false, reason: "PASSWORD_EXPIRED" };
-    }
-
-    return { valid: true };
+    return evaluatePasswordExpiryDecisionLegacy(passwordCreatedAt, this.config);
   }
 
   evaluateMinimumPasswordAgeDecision(
     passwordCreatedAt: PasswordCreatedAtInput,
   ): MinimumPasswordAgeValidationOutcome {
-    return this.evaluateMinimumPasswordAgeOutcome(passwordCreatedAt);
+    return evaluateMinimumPasswordAgeDecisionLegacy(passwordCreatedAt, this.config);
   }
 }

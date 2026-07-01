@@ -30,6 +30,8 @@ The project is split into logical modules under `src/`:
 
 Internal helpers (not part of the public surface, but relevant to behavior):
 - `src/internal/audit.ts`: fire-and-forget audit event dispatch used by the engine
+- `src/policy/legacy-complexity.ts`: extracted legacy complexity evaluation helper
+- `src/policy/legacy-rotation-expiry.ts`: extracted legacy rotation and expiry helper
 
 An index entrypoint exports all public modules:
 - `src/index.ts`
