@@ -4,10 +4,20 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run a publish dry-run without publishing to npm"
+        required: true
+        default: true
+        type: boolean
+      tag:
+        description: "Release tag to validate against package.json (example: v1.2.3)"
+        required: false
+        type: string
 
 permissions:
   contents: read
-  id-token: write
+  id-token: write # Fondamentale per --provenance e OIDC
 
 jobs:
   publish:
@@ -33,16 +43,21 @@ jobs:
       - name: Validate release tag
         shell: bash
         run: |
-          TAG="${{ github.event.release.tag_name || github.ref_name }}"
+          TAG="${{ github.event.release.tag_name || inputs.tag || github.ref_name }}"
           if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
             echo "Invalid tag '$TAG'. Expected format: vX.Y.Z or prerelease variants"
             exit 1
           fi
-          PKG_VERSION="$(node -p \"require('./package.json').version\")"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
           if [[ "v$PKG_VERSION" != "$TAG" ]]; then
             echo "Tag '$TAG' does not match package.json version 'v$PKG_VERSION'"
             exit 1
           fi
 
+      - name: Publish package (dry-run)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: npm publish --dry-run --access public
+
       - name: Publish package
+        if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run) }}
         run: npm publish --access public --provenance
