@@ -2,29 +2,27 @@ import type {
   ComplexityValidationResult,
   IdentityPolicyEngineOptions,
   MinimumPasswordAgeValidationOutcome,
-  PasswordCompromisedPasswordValidationResult,
   PasswordComplexityValidationOutcome,
   PasswordCreatedAtInput,
   PasswordExpiryStateResult,
   PasswordExpiryValidationOutcome,
   PasswordHistoryComparator,
   PasswordRotationValidationOutcome,
-  PasswordValidationIssue,
-  PasswordValidationIssueCode,
   ResolvedIdentityPolicyEngineOptions,
 } from "../types/interfaces.js";
 import { emitAuditEvent } from "../internal/audit.js";
 import {
   hasBlockedPreviousSecretSubstring,
-  hasRepeatedChars,
-  hasSequentialChars,
-  isInDenyList,
   isPasswordCompareFn,
   MS_PER_DAY,
   normalizePasswordCreatedAt,
   normalizePasswordInput,
   resolveEngineOptions,
 } from "./engine.js";
+import {
+  validateLegacyComplexity,
+  validateLegacyComplexityWithExtensions,
+} from "./legacy-complexity.js";
 
 export class IdentityPolicyEngine {
   private readonly config: ResolvedIdentityPolicyEngineOptions;
@@ -38,140 +36,7 @@ export class IdentityPolicyEngine {
   }
 
   validateComplexity(password: string): ComplexityValidationResult {
-    const errors: string[] = [];
-    const issues: PasswordValidationIssue[] = [];
-    const normalizedPassword = normalizePasswordInput(password, this.config);
-    const addIssue = (
-      code: PasswordValidationIssueCode,
-      message: string,
-      meta?: Record<string, unknown>,
-    ): void => {
-      errors.push(message);
-      issues.push({ code, message, ...(meta ? { meta } : {}) });
-    };
-
-    if (normalizedPassword.length < this.config.minLength) {
-      addIssue(
-        "PASSWORD_TOO_SHORT",
-        `Password must be at least ${this.config.minLength} characters long.`,
-        {
-          actualLength: normalizedPassword.length,
-          requiredMinLength: this.config.minLength,
-        },
-      );
-    }
-
-    if (normalizedPassword.length > this.config.maxLength) {
-      addIssue(
-        "PASSWORD_TOO_LONG",
-        `Password must be at most ${this.config.maxLength} characters long.`,
-        {
-          actualLength: normalizedPassword.length,
-          requiredMaxLength: this.config.maxLength,
-        },
-      );
-    }
-
-    if (this.config.requireUppercase && !/[A-Z]/.test(normalizedPassword)) {
-      addIssue(
-        "PASSWORD_MISSING_UPPERCASE",
-        "Password must include at least one uppercase letter.",
-        {
-          required: true,
-          pattern: "[A-Z]",
-        },
-      );
-    }
-
-    if (this.config.requireLowercase && !/[a-z]/.test(normalizedPassword)) {
-      addIssue(
-        "PASSWORD_MISSING_LOWERCASE",
-        "Password must include at least one lowercase letter.",
-        {
-          required: true,
-          pattern: "[a-z]",
-        },
-      );
-    }
-
-    if (this.config.requireNumbers && !/[0-9]/.test(normalizedPassword)) {
-      addIssue(
-        "PASSWORD_MISSING_NUMBER",
-        "Password must include at least one number.",
-        {
-          required: true,
-          pattern: "[0-9]",
-        },
-      );
-    }
-
-    if (
-      this.config.requireSymbols &&
-      !/[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/.test(normalizedPassword)
-    ) {
-      addIssue(
-        "PASSWORD_MISSING_SYMBOL",
-        "Password must include at least one symbol.",
-        {
-          required: true,
-          pattern: "[symbol]",
-        },
-      );
-    }
-
-    if (isInDenyList(normalizedPassword, this.config.denyList, this.config)) {
-      addIssue(
-        "PASSWORD_DENY_LISTED_PATTERN",
-        "Password contains a denied pattern.",
-        {
-          denyListSize: this.config.denyList.length,
-        },
-      );
-    }
-
-    if (
-      this.config.preventRepeatedChars &&
-      hasRepeatedChars(normalizedPassword, this.config.maxRepeatedChars)
-    ) {
-      addIssue(
-        "PASSWORD_REPEATED_CONSECUTIVE_CHARS",
-        `Password must not contain more than ${this.config.maxRepeatedChars} repeated consecutive characters.`,
-        {
-          maxRepeatedChars: this.config.maxRepeatedChars,
-        },
-      );
-    }
-
-    if (
-      this.config.preventSequentialChars &&
-      hasSequentialChars(normalizedPassword, this.config.maxSequentialChars)
-    ) {
-      addIssue(
-        "PASSWORD_SEQUENTIAL_CHAR_RUN",
-        `Password must not contain sequential character runs of length ${this.config.maxSequentialChars} or more.`,
-        {
-          maxSequentialChars: this.config.maxSequentialChars,
-        },
-      );
-    }
-
-    const result = {
-      isValid: errors.length === 0,
-      errors,
-      ...(issues.length > 0 ? { issues } : {}),
-    };
-
-    void emitAuditEvent(this.config.auditEventCallback, {
-      type: "complexity",
-      outcome: result.isValid ? "pass" : "fail",
-      details: {
-        errorCount: result.errors.length,
-        minLength: this.config.minLength,
-        maxLength: this.config.maxLength,
-      },
-    });
-
-    return result;
+    return validateLegacyComplexity(password, this.config);
   }
 
   evaluateComplexityOutcome(
@@ -195,72 +60,7 @@ export class IdentityPolicyEngine {
   async validateComplexityWithExtensions(
     password: string,
   ): Promise<ComplexityValidationResult> {
-    const baseResult = this.validateComplexity(password);
-    const errors = [...baseResult.errors];
-    const issues: PasswordValidationIssue[] = [...(baseResult.issues ?? [])];
-    const normalizedPassword = normalizePasswordInput(password, this.config);
-    const addIssue = (
-      code: PasswordValidationIssueCode,
-      message: string,
-      meta?: Record<string, unknown>,
-    ): void => {
-      errors.push(message);
-      issues.push({ code, message, ...(meta ? { meta } : {}) });
-    };
-
-    if (this.config.entropyValidator) {
-      const entropyResult = await this.config.entropyValidator({
-        password,
-        normalizedPassword,
-      });
-
-      if (!entropyResult.isValid) {
-        addIssue(
-          "PASSWORD_ENTROPY_TOO_LOW",
-          "Password entropy score is below the configured minimum.",
-          {
-            score: entropyResult.score,
-            ...(entropyResult.details ?? {}),
-          },
-        );
-      }
-    }
-
-    if (this.config.compromisedPasswordValidator) {
-      const rawResult = await this.config.compromisedPasswordValidator({
-        password,
-        normalizedPassword,
-      });
-      const compromisedResult: PasswordCompromisedPasswordValidationResult =
-        typeof rawResult === "boolean"
-          ? { isCompromised: rawResult }
-          : rawResult;
-
-      if (compromisedResult.isCompromised) {
-        addIssue(
-          "PASSWORD_COMPROMISED",
-          "Password appears in compromised password sources.",
-          compromisedResult.details,
-        );
-      }
-    }
-
-    const result = {
-      isValid: errors.length === 0,
-      errors,
-      ...(issues.length > 0 ? { issues } : {}),
-    };
-
-    void emitAuditEvent(this.config.auditEventCallback, {
-      type: "complexity",
-      outcome: result.isValid ? "pass" : "fail",
-      details: {
-        mode: "extended",
-        errorCount: result.errors.length,
-      },
-    });
-
-    return result;
+    return validateLegacyComplexityWithExtensions(password, this.config);
   }
 
   async evaluateRotationOutcome(
