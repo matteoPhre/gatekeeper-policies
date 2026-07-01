@@ -480,6 +480,7 @@ The repository includes:
 - integration examples with real frameworks: `tests/integration-frameworks.test.ts`
 - integration example with a custom runtime: `tests/integration-custom-runtime.test.ts`
 - contract tests for extension interfaces and comparator adapters: `tests/contracts.test.ts`
+- determinism verification tests for repeated evaluations: `tests/determinism.test.ts`
 
 Current status:
 - all tests pass with Vitest
