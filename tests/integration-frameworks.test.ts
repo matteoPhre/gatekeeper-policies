@@ -36,7 +36,8 @@ describe("integration - express", () => {
             req.headers["x-password-created-at"],
           ),
         }),
-        isPasswordExpired: (createdAt) => engine.isPasswordExpired(createdAt),
+        evaluatePasswordExpiryDecision: (createdAt) =>
+          engine.evaluatePasswordExpiryDecision(createdAt),
       }),
     );
 
@@ -74,7 +75,8 @@ describe("integration - express", () => {
             req.headers["x-password-created-at"],
           ),
         }),
-        isPasswordExpired: (createdAt) => engine.isPasswordExpired(createdAt),
+        evaluatePasswordExpiryDecision: (createdAt) =>
+          engine.evaluatePasswordExpiryDecision(createdAt),
       }),
     );
 
@@ -127,7 +129,8 @@ describe("integration - fastify", () => {
             req.headers["x-password-created-at"],
           ),
         }),
-        isPasswordExpired: (createdAt) => engine.isPasswordExpired(createdAt),
+        evaluatePasswordExpiryDecision: (createdAt) =>
+          engine.evaluatePasswordExpiryDecision(createdAt),
       }),
     );
 
@@ -169,7 +172,8 @@ describe("integration - fastify", () => {
             req.headers["x-password-created-at"],
           ),
         }),
-        isPasswordExpired: (createdAt) => engine.isPasswordExpired(createdAt),
+        evaluatePasswordExpiryDecision: (createdAt) =>
+          engine.evaluatePasswordExpiryDecision(createdAt),
       }),
     );
 

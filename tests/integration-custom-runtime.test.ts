@@ -76,7 +76,8 @@ describe("integration example - custom runtime", () => {
         userId: req.auth.userId,
         passwordCreatedAt: new Date(req.auth.passwordCreatedAt),
       }),
-      isPasswordExpired: (createdAt) => engine.isPasswordExpired(createdAt),
+      evaluatePasswordExpiryDecision: (createdAt) =>
+        engine.evaluatePasswordExpiryDecision(createdAt),
     });
 
     const result = await runCustomPipeline(middleware, {
@@ -109,7 +110,8 @@ describe("integration example - custom runtime", () => {
         userId: req.auth.userId,
         passwordCreatedAt: new Date(req.auth.passwordCreatedAt),
       }),
-      isPasswordExpired: (createdAt) => engine.isPasswordExpired(createdAt),
+      evaluatePasswordExpiryDecision: (createdAt) =>
+        engine.evaluatePasswordExpiryDecision(createdAt),
     });
 
     const result = await runCustomPipeline(middleware, {

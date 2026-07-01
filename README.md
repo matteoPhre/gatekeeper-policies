@@ -11,10 +11,10 @@ Persistence and request extraction are delegated to the host application through
 
 ## Quick Summary
 
-- `IdentityPolicyEngine` is the main entrypoint for password policy checks.
+- `PolicyCore` is the primary typed engine surface.
+- `IdentityPolicyEngine` remains as a compatibility facade for legacy integrations.
 - Prefer the typed `evaluate*` methods when you want structured outcomes and reasons.
-- Transport adapters accept either typed expiry decisions or legacy boolean callbacks.
-- Internal policy helpers are split into smaller modules, so the facade is easier to follow.
+- Transport adapters accept typed expiry decisions first.
 
 ## Scope
 
@@ -31,7 +31,8 @@ The current implementation covers:
 The project is split into logical modules under `src/`:
 - `src/types/interfaces.ts`: public contracts, options, and callback types
 - `src/policy/engine.ts`: pure policy utilities, validators, and option resolution
-- `src/policy/identity-policy-engine.ts`: orchestration class (`IdentityPolicyEngine`)
+- `src/policy-core.ts`: primary typed policy engines and decision results
+- `src/policy/identity-policy-engine.ts`: compatibility facade for the legacy API
 - `src/utils/constant-time.ts`: timing-safe comparison helpers
 - `src/adapters/http-adapters.ts`: transport helpers for request pipeline integration
 
@@ -138,8 +139,7 @@ const expiryDecision = engine.evaluatePasswordExpiryDecision(
 );
 ```
 
-If you only need a yes/no answer, the boolean helpers are still available.
-For new code, the typed `evaluate*` methods are the preferred surface.
+For new code, use the typed `evaluate*` methods.
 
 ### 2. Generic Pipeline Integration
 
