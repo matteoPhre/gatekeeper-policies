@@ -174,8 +174,8 @@ const middleware = createStatusJsonExpiryMiddleware<RequestShape, ResponseShape>
 
 Reference examples are available in test files:
 
-- Express and Fastify integration: `tests/integration.frameworks.test.ts`
-- Custom runtime integration: `tests/integration.custom-runtime.test.ts`
+- Express and Fastify integration: `tests/integration-frameworks.test.ts`
+- Custom runtime integration: `tests/integration-custom-runtime.test.ts`
 - Brute-force and credential-stuffing patterns: `tests/phase4-security.test.ts`
 
 These examples are intended as implementation references and do not introduce framework coupling in the core library.
@@ -470,9 +470,9 @@ The repository includes:
 - unit tests for engine behavior: `tests/engine.test.ts`
 - unit tests for timing-safe helpers: `tests/constant-time.test.ts`
 - reference examples for threat controls: `tests/phase4-security.test.ts`
-- unit tests for transport helpers: `tests/http-adapters.unit.test.ts`
-- integration examples with real frameworks: `tests/integration.frameworks.test.ts`
-- integration example with a custom runtime: `tests/integration.custom-runtime.test.ts`
+- unit tests for transport helpers: `tests/http-adapters-unit.test.ts`
+- integration examples with real frameworks: `tests/integration-frameworks.test.ts`
+- integration example with a custom runtime: `tests/integration-custom-runtime.test.ts`
 
 Current status:
 - all tests pass with Vitest
