@@ -266,9 +266,13 @@ When `blockSubstringsFromPreviousSecrets` is enabled, the engine also checks `pe
 
 `evaluateExpiryState(passwordCreatedAt)` returns explicit lifecycle state: `valid`, `warning`, `grace`, `expired`.
 
+`evaluatePasswordExpiryDecision(passwordCreatedAt)` returns a typed success/failure outcome for expiry enforcement.
+
 ### 5. Minimum Password Age
 
 `isMinimumPasswordAgeSatisfied(passwordCreatedAt)` accepts `Date | string` and enforces the optional `minimumPasswordAgeDays` policy before allowing a password change.
+
+`evaluateMinimumPasswordAgeDecision(passwordCreatedAt)` returns a typed success/failure outcome for minimum-age enforcement.
 
 ### 6. Typed Validation Outcomes
 
@@ -277,6 +281,8 @@ In addition to the boolean/string-based APIs above, the engine exposes additive 
 - `evaluateComplexityOutcome(password)` → `PasswordComplexityValidationOutcome`
 - `evaluateRotationOutcome(plainPassword, userId, comparator)` → `PasswordRotationValidationOutcome`
 - `evaluateMinimumPasswordAgeOutcome(passwordCreatedAt)` → `MinimumPasswordAgeValidationOutcome`
+- `evaluatePasswordExpiryDecision(passwordCreatedAt)` → `PasswordExpiryValidationOutcome`
+- `evaluateMinimumPasswordAgeDecision(passwordCreatedAt)` → `MinimumPasswordAgeValidationOutcome`
 
 Existing methods (`validateComplexity`, `validateRotation`, `isMinimumPasswordAgeSatisfied`, …) are unchanged.
 

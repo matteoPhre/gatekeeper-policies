@@ -270,6 +270,9 @@ export type PolicyValidationOutcome<TReason extends string> =
   | PolicyValidationSuccess
   | PolicyValidationFailure<TReason>;
 
+export type PasswordExpiryValidationOutcome =
+  PolicyValidationOutcome<"PASSWORD_EXPIRED">;
+
 export type PasswordRotationFailureReason =
   | "PASSWORD_REUSED"
   | "PASSWORD_CONTAINS_PREVIOUS_SUBSTRING";

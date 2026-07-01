@@ -6,6 +6,7 @@ import type {
   PasswordComplexityValidationOutcome,
   PasswordCreatedAtInput,
   PasswordExpiryStateResult,
+  PasswordExpiryValidationOutcome,
   PasswordHistoryComparator,
   PasswordRotationValidationOutcome,
   PasswordValidationIssue,
@@ -612,5 +613,21 @@ export class IdentityPolicyEngine {
         minimumPasswordAgeDays: this.config.minimumPasswordAgeDays,
       },
     };
+  }
+
+  evaluatePasswordExpiryDecision(
+    passwordCreatedAt: PasswordCreatedAtInput,
+  ): PasswordExpiryValidationOutcome {
+    if (this.isPasswordExpired(passwordCreatedAt)) {
+      return { valid: false, reason: "PASSWORD_EXPIRED" };
+    }
+
+    return { valid: true };
+  }
+
+  evaluateMinimumPasswordAgeDecision(
+    passwordCreatedAt: PasswordCreatedAtInput,
+  ): MinimumPasswordAgeValidationOutcome {
+    return this.evaluateMinimumPasswordAgeOutcome(passwordCreatedAt);
   }
 }
