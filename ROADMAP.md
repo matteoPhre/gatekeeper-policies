@@ -1,63 +1,113 @@
 # Roadmap
 
-This roadmap focuses on strengthening policy controls while preserving the current framework-agnostic architecture.
+This roadmap is the merged canonical plan for the repository. It combines the architectural priorities from the previous roadmap drafts and uses one file to track both completed work and remaining gaps.
 
-## Phase 1 - Policy Hardening
+Legend:
+- `[x]` implemented in the current codebase
+- `[ ]` not yet implemented
+
+## Phase 0 - Core Architecture Hardening
+
+1. [x] Introduce unified PolicyDecision model across the core modules.
+2. [ ] Replace all boolean returns with typed decision objects.
+3. [x] Introduce strict error code unions.
+4. [x] Split IdentityPolicyEngine into the focused engines already present in `src/policy-core.ts`.
+5. [x] Introduce trace/debug evaluation support with opt-in zero-overhead tracing.
+6. [ ] Normalize async model across all public APIs.
+7. [x] Add fail-open / fail-closed strategy configuration.
+8. [x] Enforce deep immutable configuration at runtime.
+
+Current gap:
+- the legacy facade still exposes some boolean-style helpers for compatibility, so the public surface is not yet fully typed end-to-end.
+
+## Phase 1 - Quality Gates
+
+1. [x] Add property-based testing for complexity validation, rotation logic, and expiry lifecycle.
+2. [x] Add contract tests for extension interfaces and external comparators.
+3. [x] Add determinism verification tests for same input -> same output.
+4. [ ] Add CI matrix for multiple Node.js LTS versions.
+
+## Phase 2 - Policy Hardening
 
 1. [x] Add configurable lower-case requirement (`requireLowercase`).
-2. [x] Add configurable maximum length (`maxLength`) to mitigate abuse scenarios.
-3. [x] Add configurable deny-lists for weak/common patterns.
+2. [x] Add configurable maximum length (`maxLength`).
+3. [x] Add configurable deny-lists.
 4. [x] Add repeated/sequential character detection rules.
-5. [x] Add optional normalization rules (trim, unicode normalization).
+5. [x] Add deterministic normalization pipeline:
+	- trim first
+	- unicode normalization second
+	- metric evaluation last
 
-## Phase 2 - Rotation and Reuse Controls
+## Phase 3 - Rotation and Reuse Controls
 
-1. [x] Add policy option to enforce minimum password age before change.
-2. [x] Add optional history comparison strategy interface for advanced stores.
-3. [x] Add bulk-history comparison helper for optimized remote adapters.
-4. [x] Add optional policy to block substrings from previous secrets.
+1. [x] Enforce minimum password age before change.
+2. [x] Extend history comparison strategy interface.
+3. [x] Add bulk-history comparison helper.
+4. [x] Add optional substring blocking from previous secrets.
 
-## Phase 3 - Expiry Lifecycle Extensions
+## Phase 4 - Expiry Lifecycle
 
 1. [x] Add warning window calculation (`daysUntilExpiry`).
-2. [x] Add helper APIs for grace periods after expiry.
-3. [x] Add explicit result type for expiry states (`valid`, `warning`, `expired`, `grace`).
-4. [x] Add utilities for UTC-safe calendar-based policies.
+2. [x] Add grace period helpers.
+3. [x] Add explicit lifecycle states:
+	- valid
+	- warning
+	- grace
+	- expired
+4. [x] Keep UTC-safe calendar utilities.
 
-## Phase 4 - Operational and Security Features
+## Phase 5 - Audit and Observability
 
-1. [x] Add optional audit event callbacks for compliance logging.
-2. [x] Add structured error codes across validations.
-3. [x] Add constant-time utility helpers for safer comparisons when needed.
-4. [x] Add threat-focused examples for brute-force and credential-stuffing controls.
-5. [x] Add typed validation outcomes for policy violations (e.g. `{ valid: false, reason, details }`) while preserving backward compatibility only when it keeps the design clean (no compatibility spaghetti); if required, introduce explicit versioned APIs with clear deprecation/migration notes.
+1. [x] Introduce strongly typed audit event schema:
+	- complexity
+	- rotation
+	- expiry
+	- minimumPasswordAge
+	- gracePeriod
+2. [x] Ensure audit includes:
+	- policyVersion
+	- timestamp
+	- outcome
+	- structured metadata
+3. [x] Keep audit callback non-blocking and failure-isolated.
 
-## Phase 5 - Advanced Validation and Security Integrations
+## Phase 6 - Extension Isolation
 
-1. [x] Add intrinsic complexity validation extensions (entropy scoring, zxcvbn-compatible scoring adapters, compromised-password dictionary hooks) with stateless host-managed execution.
-2. [x] Add high-density structured complexity errors (`code` + `meta`) to support host-driven i18n mapping without localization coupling.
-3. Add optional pluggable entropy verification hooks (`entropyValidator`) for async strength analysis without bundling external analyzers.
-4. Add zero-knowledge compromised password audit helpers (k-Anonymity flow) with host-managed network calls for breach checks.
-5. Enforce deterministic normalization sequencing so trim/unicode normalization always run before length/composition metrics.
+Move to a future external package:
 
-## Phase 6 - Adapter Ecosystem and DX
+- entropy validators (zxcvbn-like)
+- compromised password checks
+- k-anonymity integrations
 
-1. Add hashing engine abstraction adapters for history checks (Argon2, bcrypt, scrypt) without importing hashing packages in core.
-2. Add additional integration examples (Koa, Hono, Nest middleware layer).
-3. Add typed adapter templates to accelerate custom framework integration.
-4. Add a dedicated examples directory with runnable mini-projects.
-5. Add API reference generation and versioned docs.
+Core must remain:
+- deterministic
+- dependency-free
+- predictable
 
-## Phase 7 - Quality and Compatibility
+Status:
+- [ ] still bundled in the core surface today; this is the main intentional gap before extraction.
 
-1. Add contract tests to validate third-party adapters.
-2. Add property-based tests for complexity and rotation edge cases.
-3. Add CI matrix for multiple Node LTS versions.
-4. Add semantic-release workflow and changelog automation.
+## Phase 7 - Adapter Ecosystem
+
+1. [x] Provide minimal adapter examples:
+	- Express
+	- Fastify
+	- custom runtime
+2. [x] Avoid framework coupling in core.
 
 ## Compatibility Commitment
 
-All future changes should preserve:
+The following must always hold:
+
 1. Framework agnosticism in core modules.
 2. No mandatory database or ORM dependencies.
-3. Backward-compatible APIs where feasible, with clear migration notes for breaking changes.
+3. Deterministic execution for core policy evaluation.
+4. Strong typing across all public APIs.
+
+## Notes On Remaining Work
+
+The remaining highest-priority work is:
+
+1. Finish the fully typed facade story by removing the remaining boolean-style legacy helpers or making their typed counterparts the canonical API.
+2. Add the CI matrix for multiple Node.js LTS versions.
+3. Plan the phase-6 extraction of entropy and compromised-password checks into a future external package.

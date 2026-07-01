@@ -494,6 +494,6 @@ Current status:
 
 ## Roadmap
 
-Planned future enhancements are documented in:
+Planned future enhancements are documented in the merged canonical roadmap:
 
 - `ROADMAP.md`
