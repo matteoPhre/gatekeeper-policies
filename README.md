@@ -481,6 +481,7 @@ The repository includes:
 - integration example with a custom runtime: `tests/integration-custom-runtime.test.ts`
 - contract tests for extension interfaces and comparator adapters: `tests/contracts.test.ts`
 - determinism verification tests for repeated evaluations: `tests/determinism.test.ts`
+- property-based quality gates for complexity, rotation, and expiry: `tests/property-based.test.ts`
 
 Current status:
 - all tests pass with Vitest
