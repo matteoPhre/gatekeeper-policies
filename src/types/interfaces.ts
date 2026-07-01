@@ -2,6 +2,24 @@ export type PasswordCreatedAtInput = Date | string;
 
 export type PasswordUnicodeNormalizationForm = "NFC" | "NFD" | "NFKC" | "NFKD";
 
+export type PolicyDecision<TReason extends string = string> =
+  | { success: true }
+  | {
+      success: false;
+      reason: TReason;
+      meta?: Readonly<Record<string, unknown>>;
+    };
+
+export type PolicyTraceStep = {
+  step: string;
+  success: boolean;
+  meta?: Readonly<Record<string, unknown>>;
+};
+
+export type PolicyEvaluationResult<TReason extends string> = PolicyDecision<TReason> & {
+  trace?: PolicyTraceStep[];
+};
+
 export interface PasswordPolicyConfig {
   minLength?: number;
   maxLength?: number;
@@ -51,6 +69,8 @@ export type PasswordAuditEventType =
 export interface PasswordAuditEvent {
   type: PasswordAuditEventType;
   userId?: string;
+  policyVersion: string;
+  timestamp: string;
   outcome: "pass" | "fail" | "info";
   details?: Record<string, unknown>;
 }
@@ -128,6 +148,10 @@ export type PasswordCompareFn = (
   encrypted: string,
 ) => Promise<boolean>;
 
+export type PasswordExpiryDecisionEvaluator = (
+  passwordCreatedAt: Date,
+) => PasswordExpiryValidationOutcome;
+
 export interface PasswordHistoryComparisonContext {
   userId: string;
   plainPassword: string;
@@ -174,7 +198,8 @@ export interface GenericExpiryMiddlewareContext<TRequest> {
 
 export interface GenericExpiryGuardOptions<TRequest, TExpiredResult = unknown> {
   getUserIdAndDateFn: GetUserIdAndDateFn<TRequest>;
-  isPasswordExpired: (passwordCreatedAt: Date) => boolean;
+  evaluatePasswordExpiryDecision?: PasswordExpiryDecisionEvaluator;
+  isPasswordExpired?: (passwordCreatedAt: Date) => boolean;
   onExpired: (
     context: GenericExpiryMiddlewareContext<TRequest>,
   ) => Promise<TExpiredResult> | TExpiredResult;
@@ -193,7 +218,8 @@ export interface CreateStatusJsonExpiryMiddlewareOptions<
   TResponse extends StatusJsonResponseLike = StatusJsonResponseLike,
 > {
   getUserIdAndDateFn: GetUserIdAndDateFn<TRequest>;
-  isPasswordExpired: (passwordCreatedAt: Date) => boolean;
+  evaluatePasswordExpiryDecision?: PasswordExpiryDecisionEvaluator;
+  isPasswordExpired?: (passwordCreatedAt: Date) => boolean;
   buildExpiredPayload?: () => ExpiryRejectionPayload;
   onForbidden?: (
     response: TResponse,
@@ -212,7 +238,8 @@ export interface CreateCodeSendExpiryHookOptions<
   TReply extends CodeSendReplyLike = CodeSendReplyLike,
 > {
   getUserIdAndDateFn: GetUserIdAndDateFn<TRequest>;
-  isPasswordExpired: (passwordCreatedAt: Date) => boolean;
+  evaluatePasswordExpiryDecision?: PasswordExpiryDecisionEvaluator;
+  isPasswordExpired?: (passwordCreatedAt: Date) => boolean;
   buildExpiredPayload?: () => ExpiryRejectionPayload;
   onForbidden?: (reply: TReply, payload: ExpiryRejectionPayload) => unknown;
 }
@@ -249,6 +276,9 @@ export type PolicyValidationFailure<TReason extends string> = {
 export type PolicyValidationOutcome<TReason extends string> =
   | PolicyValidationSuccess
   | PolicyValidationFailure<TReason>;
+
+export type PasswordExpiryValidationOutcome =
+  PolicyValidationOutcome<"PASSWORD_EXPIRED">;
 
 export type PasswordRotationFailureReason =
   | "PASSWORD_REUSED"

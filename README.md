@@ -9,6 +9,13 @@ The library is intentionally unopinionated:
 
 Persistence and request extraction are delegated to the host application through typed callbacks.
 
+## Quick Summary
+
+- `PolicyCore` is the primary typed engine surface.
+- `IdentityPolicyEngine` remains as a compatibility facade for legacy integrations.
+- Prefer the typed `evaluate*` methods when you want structured outcomes and reasons.
+- Transport adapters accept typed expiry decisions first.
+
 ## Scope
 
 The current implementation covers:
@@ -24,12 +31,15 @@ The current implementation covers:
 The project is split into logical modules under `src/`:
 - `src/types/interfaces.ts`: public contracts, options, and callback types
 - `src/policy/engine.ts`: pure policy utilities, validators, and option resolution
-- `src/policy/identity-policy-engine.ts`: orchestration class (`IdentityPolicyEngine`)
+- `src/policy-core.ts`: primary typed policy engines and decision results
+- `src/policy/identity-policy-engine.ts`: compatibility facade for the legacy API
 - `src/utils/constant-time.ts`: timing-safe comparison helpers
 - `src/adapters/http-adapters.ts`: transport helpers for request pipeline integration
 
 Internal helpers (not part of the public surface, but relevant to behavior):
 - `src/internal/audit.ts`: fire-and-forget audit event dispatch used by the engine
+- `src/policy/legacy-complexity.ts`: extracted legacy complexity evaluation helper
+- `src/policy/legacy-rotation-expiry.ts`: extracted legacy rotation and expiry helper
 
 An index entrypoint exports all public modules:
 - `src/index.ts`
@@ -124,10 +134,14 @@ const canRotate = await engine.validateRotation(
 		return false;
 	},
 );
-const expired = engine.isPasswordExpired("2026-03-01T00:00:00.000Z");
+const expiryDecision = engine.evaluatePasswordExpiryDecision(
+	"2026-03-01T00:00:00.000Z",
+);
 ```
 
-### 2. Generic pipeline integration
+For new code, use the typed `evaluate*` methods.
+
+### 2. Generic Pipeline Integration
 
 Use this mode for custom runtimes and in-house HTTP abstractions.
 
@@ -166,17 +180,18 @@ const middleware = createStatusJsonExpiryMiddleware<RequestShape, ResponseShape>
 		userId: req.auth.userId,
 		passwordCreatedAt: new Date(req.auth.passwordCreatedAt),
 	}),
-	isPasswordExpired: (createdAt) => engine.isPasswordExpired(createdAt),
+	evaluatePasswordExpiryDecision: (createdAt) =>
+		engine.evaluatePasswordExpiryDecision(createdAt),
 });
 ```
 
-### 3. Framework integration examples
+### 3. Framework Integration Examples
 
 Reference examples are available in test files:
 
-- Express and Fastify integration: `tests/integration.frameworks.test.ts`
-- Custom runtime integration: `tests/integration.custom-runtime.test.ts`
-- Brute-force and credential-stuffing patterns: `tests/phase4-security.test.ts`
+- Express and Fastify integration: `tests/integration-frameworks.test.ts`
+- Custom runtime integration: `tests/integration-custom-runtime.test.ts`
+- Brute-force and credential-stuffing patterns: `tests/security.test.ts`
 
 These examples are intended as implementation references and do not introduce framework coupling in the core library.
 
@@ -214,7 +229,7 @@ These examples are intended as implementation references and do not introduce fr
 - `entropyValidator(context)` for optional host-managed entropy/strength checks
 - `compromisedPasswordValidator(context)` for optional host-managed breach checks
 
-`auditEventCallback` is optional and fire-and-forget: the engine clones each event before invoking the callback and ignores callback failures so validation behavior stays deterministic.
+`auditEventCallback` is optional and fire-and-forget: the engine clones each event before invoking the callback, enriches it with `policyVersion` and `timestamp`, and ignores callback failures so validation behavior stays deterministic.
 
 ### 2. Complexity Validation
 
@@ -266,9 +281,13 @@ When `blockSubstringsFromPreviousSecrets` is enabled, the engine also checks `pe
 
 `evaluateExpiryState(passwordCreatedAt)` returns explicit lifecycle state: `valid`, `warning`, `grace`, `expired`.
 
+`evaluatePasswordExpiryDecision(passwordCreatedAt)` returns a typed success/failure outcome for expiry enforcement.
+
 ### 5. Minimum Password Age
 
 `isMinimumPasswordAgeSatisfied(passwordCreatedAt)` accepts `Date | string` and enforces the optional `minimumPasswordAgeDays` policy before allowing a password change.
+
+`evaluateMinimumPasswordAgeDecision(passwordCreatedAt)` returns a typed success/failure outcome for minimum-age enforcement.
 
 ### 6. Typed Validation Outcomes
 
@@ -277,6 +296,8 @@ In addition to the boolean/string-based APIs above, the engine exposes additive 
 - `evaluateComplexityOutcome(password)` → `PasswordComplexityValidationOutcome`
 - `evaluateRotationOutcome(plainPassword, userId, comparator)` → `PasswordRotationValidationOutcome`
 - `evaluateMinimumPasswordAgeOutcome(passwordCreatedAt)` → `MinimumPasswordAgeValidationOutcome`
+- `evaluatePasswordExpiryDecision(passwordCreatedAt)` → `PasswordExpiryValidationOutcome`
+- `evaluateMinimumPasswordAgeDecision(passwordCreatedAt)` → `MinimumPasswordAgeValidationOutcome`
 
 Existing methods (`validateComplexity`, `validateRotation`, `isMinimumPasswordAgeSatisfied`, …) are unchanged.
 
@@ -469,10 +490,13 @@ The repository includes:
 
 - unit tests for engine behavior: `tests/engine.test.ts`
 - unit tests for timing-safe helpers: `tests/constant-time.test.ts`
-- reference examples for threat controls: `tests/phase4-security.test.ts`
-- unit tests for transport helpers: `tests/http-adapters.unit.test.ts`
-- integration examples with real frameworks: `tests/integration.frameworks.test.ts`
-- integration example with a custom runtime: `tests/integration.custom-runtime.test.ts`
+- reference examples for threat controls: `tests/security.test.ts`
+- unit tests for transport helpers: `tests/http-adapters-unit.test.ts`
+- integration examples with real frameworks: `tests/integration-frameworks.test.ts`
+- integration example with a custom runtime: `tests/integration-custom-runtime.test.ts`
+- contract tests for extension interfaces and comparator adapters: `tests/contracts.test.ts`
+- determinism verification tests for repeated evaluations: `tests/determinism.test.ts`
+- property-based quality gates for complexity, rotation, and expiry: `tests/property-based.test.ts`
 
 Current status:
 - all tests pass with Vitest
@@ -485,6 +509,6 @@ Current status:
 
 ## Roadmap
 
-Planned future enhancements are documented in:
+Planned future enhancements are documented in the merged canonical roadmap:
 
 - `ROADMAP.md`

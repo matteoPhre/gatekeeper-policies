@@ -3,7 +3,7 @@ import {
   constantTimeStringEqual,
   createCompromisedPasswordDictionaryValidator,
   IdentityPolicyEngine,
-} from "../src";
+} from "../src/index.js";
 import type { PasswordPersistenceCallbacks } from "../src/types/interfaces.js";
 
 function createPersistenceMock(): PasswordPersistenceCallbacks {

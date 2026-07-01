@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createCodeSendExpiryHook,
   createStatusJsonExpiryMiddleware,
+  evaluatePasswordExpiryDecisionForRequest,
   evaluatePasswordExpiry,
 } from "../src";
 
@@ -17,7 +18,7 @@ describe("evaluatePasswordExpiry", () => {
           userId: "u1",
           passwordCreatedAt: new Date("2026-06-01T00:00:00.000Z"),
         }),
-        isPasswordExpired: () => false,
+        evaluatePasswordExpiryDecision: () => ({ valid: true }),
         onExpired,
       },
     );
@@ -35,7 +36,10 @@ describe("evaluatePasswordExpiry", () => {
           userId: "u1",
           passwordCreatedAt: new Date("2024-01-01T00:00:00.000Z"),
         }),
-        isPasswordExpired: () => true,
+        evaluatePasswordExpiryDecision: () => ({
+          valid: false,
+          reason: "PASSWORD_EXPIRED",
+        }),
         onExpired: async ({ payload }) => payload.code,
       },
     );
@@ -52,7 +56,7 @@ describe("createStatusJsonExpiryMiddleware", () => {
         userId: "u1",
         passwordCreatedAt: new Date(),
       }),
-      isPasswordExpired: () => false,
+      evaluatePasswordExpiryDecision: () => ({ valid: true }),
     });
 
     const response = {
@@ -77,7 +81,10 @@ describe("createStatusJsonExpiryMiddleware", () => {
         userId: "u1",
         passwordCreatedAt: new Date("2020-01-01T00:00:00.000Z"),
       }),
-      isPasswordExpired: () => true,
+      evaluatePasswordExpiryDecision: () => ({
+        valid: false,
+        reason: "PASSWORD_EXPIRED",
+      }),
     });
 
     await middleware({} as unknown, response, vi.fn());
@@ -92,7 +99,7 @@ describe("createStatusJsonExpiryMiddleware", () => {
       getUserIdAndDateFn: async () => {
         throw expectedError;
       },
-      isPasswordExpired: () => false,
+      evaluatePasswordExpiryDecision: () => ({ valid: true }),
     });
 
     const next = vi.fn();
@@ -118,7 +125,7 @@ describe("createCodeSendExpiryHook", () => {
         userId: "u1",
         passwordCreatedAt: new Date(),
       }),
-      isPasswordExpired: () => false,
+      evaluatePasswordExpiryDecision: () => ({ valid: true }),
     });
 
     await hook({} as unknown, reply);
@@ -137,12 +144,32 @@ describe("createCodeSendExpiryHook", () => {
         userId: "u1",
         passwordCreatedAt: new Date("2020-01-01T00:00:00.000Z"),
       }),
-      isPasswordExpired: () => true,
+      evaluatePasswordExpiryDecision: () => ({
+        valid: false,
+        reason: "PASSWORD_EXPIRED",
+      }),
     });
 
     await hook({} as unknown, reply);
 
     expect(reply.code).toHaveBeenCalledWith(403);
     expect(send).toHaveBeenCalledWith({ code: "PASSWORD_EXPIRED" });
+  });
+
+  it("supports the legacy boolean fallback path", async () => {
+    const result = await evaluatePasswordExpiryDecisionForRequest(
+      { headers: {} },
+      {
+        getUserIdAndDateFn: async () => ({
+          userId: "u1",
+          passwordCreatedAt: new Date("2024-01-01T00:00:00.000Z"),
+        }),
+        isPasswordExpired: () => true,
+        onExpired: async ({ payload }) => payload.code,
+      },
+    );
+
+    expect(result.decision.valid).toBe(false);
+    expect(result.expiredResult).toBe("PASSWORD_EXPIRED");
   });
 });
