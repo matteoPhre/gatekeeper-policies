@@ -9,7 +9,7 @@ Legend:
 ## Phase 0 - Core Architecture Hardening
 
 1. [x] Introduce unified PolicyDecision model across the core modules.
-2. [ ] Replace all boolean returns with typed decision objects.
+2. [x] Replace all boolean returns with typed decision objects.
 3. [x] Introduce strict error code unions.
 4. [x] Split IdentityPolicyEngine into the focused engines already present in `src/policy-core.ts`.
 5. [x] Introduce trace/debug evaluation support with opt-in zero-overhead tracing.
@@ -18,7 +18,7 @@ Legend:
 8. [x] Enforce deep immutable configuration at runtime.
 
 Current gap:
-- the legacy facade still exposes some boolean-style helpers for compatibility, so the public surface is not yet fully typed end-to-end.
+- boolean compatibility wrappers still exist for host code that depends on them, but the typed decision methods are now the canonical API across the engine and adapter layer.
 
 ## Phase 1 - Quality Gates
 
@@ -108,6 +108,6 @@ The following must always hold:
 
 The remaining highest-priority work is:
 
-1. Finish the fully typed facade story by removing the remaining boolean-style legacy helpers or making their typed counterparts the canonical API.
+1. Keep the typed decision methods as the primary API and trim any remaining documentation references that suggest boolean helpers are the preferred path.
 2. Add the CI matrix for multiple Node.js LTS versions.
 3. Plan the phase-6 extraction of entropy and compromised-password checks into a future external package.

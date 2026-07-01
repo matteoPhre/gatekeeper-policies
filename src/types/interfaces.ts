@@ -148,6 +148,10 @@ export type PasswordCompareFn = (
   encrypted: string,
 ) => Promise<boolean>;
 
+export type PasswordExpiryDecisionEvaluator = (
+  passwordCreatedAt: Date,
+) => PasswordExpiryValidationOutcome;
+
 export interface PasswordHistoryComparisonContext {
   userId: string;
   plainPassword: string;
@@ -194,7 +198,8 @@ export interface GenericExpiryMiddlewareContext<TRequest> {
 
 export interface GenericExpiryGuardOptions<TRequest, TExpiredResult = unknown> {
   getUserIdAndDateFn: GetUserIdAndDateFn<TRequest>;
-  isPasswordExpired: (passwordCreatedAt: Date) => boolean;
+  evaluatePasswordExpiryDecision?: PasswordExpiryDecisionEvaluator;
+  isPasswordExpired?: (passwordCreatedAt: Date) => boolean;
   onExpired: (
     context: GenericExpiryMiddlewareContext<TRequest>,
   ) => Promise<TExpiredResult> | TExpiredResult;
@@ -213,7 +218,8 @@ export interface CreateStatusJsonExpiryMiddlewareOptions<
   TResponse extends StatusJsonResponseLike = StatusJsonResponseLike,
 > {
   getUserIdAndDateFn: GetUserIdAndDateFn<TRequest>;
-  isPasswordExpired: (passwordCreatedAt: Date) => boolean;
+  evaluatePasswordExpiryDecision?: PasswordExpiryDecisionEvaluator;
+  isPasswordExpired?: (passwordCreatedAt: Date) => boolean;
   buildExpiredPayload?: () => ExpiryRejectionPayload;
   onForbidden?: (
     response: TResponse,
@@ -232,7 +238,8 @@ export interface CreateCodeSendExpiryHookOptions<
   TReply extends CodeSendReplyLike = CodeSendReplyLike,
 > {
   getUserIdAndDateFn: GetUserIdAndDateFn<TRequest>;
-  isPasswordExpired: (passwordCreatedAt: Date) => boolean;
+  evaluatePasswordExpiryDecision?: PasswordExpiryDecisionEvaluator;
+  isPasswordExpired?: (passwordCreatedAt: Date) => boolean;
   buildExpiredPayload?: () => ExpiryRejectionPayload;
   onForbidden?: (reply: TReply, payload: ExpiryRejectionPayload) => unknown;
 }

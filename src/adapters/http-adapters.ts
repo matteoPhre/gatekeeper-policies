@@ -6,6 +6,7 @@ import {
   type ExpiryRejectionPayload,
   type GenericExpiryGuardOptions,
   type PasswordSubjectContext,
+  type PasswordExpiryValidationOutcome,
   type PipelineNextFn,
   type StatusJsonExpiryMiddleware,
   type StatusJsonResponseLike,
@@ -19,6 +20,62 @@ function getExpiredPayload(
   return payloadFactory ? payloadFactory() : EXPIRED_PAYLOAD;
 }
 
+function evaluateExpiryDecision(
+  passwordCreatedAt: Date,
+  options: {
+    evaluatePasswordExpiryDecision?: (
+      passwordCreatedAt: Date,
+    ) => PasswordExpiryValidationOutcome;
+    isPasswordExpired?: (passwordCreatedAt: Date) => boolean;
+  },
+): PasswordExpiryValidationOutcome {
+  if (options.evaluatePasswordExpiryDecision) {
+    return options.evaluatePasswordExpiryDecision(passwordCreatedAt);
+  }
+
+  if (options.isPasswordExpired) {
+    if (options.isPasswordExpired(passwordCreatedAt)) {
+      return { valid: false, reason: "PASSWORD_EXPIRED" };
+    }
+
+    return { valid: true };
+  }
+
+  return { valid: true };
+}
+
+export async function evaluatePasswordExpiryDecisionForRequest<
+  TRequest,
+  TExpiredResult = unknown,
+>(
+  request: TRequest,
+  options: GenericExpiryGuardOptions<TRequest, TExpiredResult>,
+): Promise<{
+  decision: PasswordExpiryValidationOutcome;
+  subject: PasswordSubjectContext;
+  expiredResult?: TExpiredResult;
+}> {
+  const subject = await options.getUserIdAndDateFn(request);
+  const decision = evaluateExpiryDecision(subject.passwordCreatedAt, options);
+
+  if (decision.valid) {
+    return { decision, subject };
+  }
+
+  const payload: ExpiryRejectionPayload = { code: "PASSWORD_EXPIRED" };
+  const expiredResult = await options.onExpired({
+    request,
+    subject,
+    payload,
+  });
+
+  return {
+    decision,
+    subject,
+    expiredResult,
+  };
+}
+
 export async function evaluatePasswordExpiry<
   TRequest,
   TExpiredResult = unknown,
@@ -30,24 +87,12 @@ export async function evaluatePasswordExpiry<
   subject: PasswordSubjectContext;
   expiredResult?: TExpiredResult;
 }> {
-  const subject = await options.getUserIdAndDateFn(request);
-  const expired = options.isPasswordExpired(subject.passwordCreatedAt);
-
-  if (!expired) {
-    return { expired: false, subject };
-  }
-
-  const payload: ExpiryRejectionPayload = { code: "PASSWORD_EXPIRED" };
-  const expiredResult = await options.onExpired({
-    request,
-    subject,
-    payload,
-  });
+  const result = await evaluatePasswordExpiryDecisionForRequest(request, options);
 
   return {
-    expired: true,
-    subject,
-    expiredResult,
+    expired: !result.decision.valid,
+    subject: result.subject,
+    expiredResult: result.expiredResult,
   };
 }
 
@@ -64,9 +109,9 @@ export function createStatusJsonExpiryMiddleware<
   ): Promise<void> => {
     try {
       const subject = await options.getUserIdAndDateFn(request);
-      const expired = options.isPasswordExpired(subject.passwordCreatedAt);
+      const decision = evaluateExpiryDecision(subject.passwordCreatedAt, options);
 
-      if (expired) {
+      if (!decision.valid) {
         const payload = getExpiredPayload(options.buildExpiredPayload);
 
         if (options.onForbidden) {
@@ -93,9 +138,9 @@ export function createCodeSendExpiryHook<
 ): CodeSendExpiryHook<TRequest, TReply> {
   return async (request: TRequest, reply: TReply): Promise<void> => {
     const subject = await options.getUserIdAndDateFn(request);
-    const expired = options.isPasswordExpired(subject.passwordCreatedAt);
+    const decision = evaluateExpiryDecision(subject.passwordCreatedAt, options);
 
-    if (!expired) {
+    if (decision.valid) {
       return;
     }
 

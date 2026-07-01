@@ -9,6 +9,13 @@ The library is intentionally unopinionated:
 
 Persistence and request extraction are delegated to the host application through typed callbacks.
 
+## Quick Summary
+
+- `IdentityPolicyEngine` is the main entrypoint for password policy checks.
+- Prefer the typed `evaluate*` methods when you want structured outcomes and reasons.
+- Transport adapters accept either typed expiry decisions or legacy boolean callbacks.
+- Internal policy helpers are split into smaller modules, so the facade is easier to follow.
+
 ## Scope
 
 The current implementation covers:
@@ -126,10 +133,15 @@ const canRotate = await engine.validateRotation(
 		return false;
 	},
 );
-const expired = engine.isPasswordExpired("2026-03-01T00:00:00.000Z");
+const expiryDecision = engine.evaluatePasswordExpiryDecision(
+	"2026-03-01T00:00:00.000Z",
+);
 ```
 
-### 2. Generic pipeline integration
+If you only need a yes/no answer, the boolean helpers are still available.
+For new code, the typed `evaluate*` methods are the preferred surface.
+
+### 2. Generic Pipeline Integration
 
 Use this mode for custom runtimes and in-house HTTP abstractions.
 
@@ -168,11 +180,12 @@ const middleware = createStatusJsonExpiryMiddleware<RequestShape, ResponseShape>
 		userId: req.auth.userId,
 		passwordCreatedAt: new Date(req.auth.passwordCreatedAt),
 	}),
-	isPasswordExpired: (createdAt) => engine.isPasswordExpired(createdAt),
+	evaluatePasswordExpiryDecision: (createdAt) =>
+		engine.evaluatePasswordExpiryDecision(createdAt),
 });
 ```
 
-### 3. Framework integration examples
+### 3. Framework Integration Examples
 
 Reference examples are available in test files:
 
