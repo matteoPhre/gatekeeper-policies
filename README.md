@@ -94,16 +94,17 @@ Suggested release flow:
 npm run release:check
 npm version patch   # or minor / major
 git push origin main --follow-tags
-npm run publish:npm
 ```
 
-Releases are currently published manually from a trusted local environment.
+Publishing is automated through GitHub Actions when a GitHub Release is published.
 
-Manual publish prerequisites:
+GitHub Actions publish prerequisites:
 
 - npm account with publish permissions on `@matteophre`
 - npm account email must be verified
-- run publish from a local authenticated session (`npm whoami`)
+- npm trusted publishing configured for this repository (GitHub Actions OIDC)
+
+Once `main` and tags are pushed, create a GitHub Release from the new version tag to trigger publish.
 
 ## Quick Start
 

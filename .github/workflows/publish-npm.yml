@@ -1,0 +1,48 @@
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Release checks
+        run: npm run release:check
+
+      - name: Validate release tag
+        shell: bash
+        run: |
+          TAG="${{ github.event.release.tag_name || github.ref_name }}"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid tag '$TAG'. Expected format: vX.Y.Z or prerelease variants"
+            exit 1
+          fi
+          PKG_VERSION="$(node -p \"require('./package.json').version\")"
+          if [[ "v$PKG_VERSION" != "$TAG" ]]; then
+            echo "Tag '$TAG' does not match package.json version 'v$PKG_VERSION'"
+            exit 1
+          fi
+
+      - name: Publish package
+        run: npm publish --access public --provenance
