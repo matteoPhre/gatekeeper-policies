@@ -8,6 +8,7 @@ import type {
   ResolvedIdentityPolicyEngineOptions,
 } from "../types/interfaces.js";
 import { emitAuditEvent } from "../internal/audit.js";
+import { emitMetricEvent } from "../internal/metrics.js";
 import {
   hasBlockedPreviousSecretSubstring,
   isPasswordCompareFn,
@@ -45,6 +46,16 @@ export async function evaluateLegacyRotationOutcome(
         },
       });
 
+      void emitMetricEvent(config.metricsHook, {
+        name: "password.rotation.evaluations",
+        type: "counter",
+        value: 1,
+        attributes: {
+          outcome: "fail",
+          mode: "previousSubstring",
+        },
+      });
+
       return {
         valid: false,
         reason: "PASSWORD_CONTAINS_PREVIOUS_SUBSTRING",
@@ -79,6 +90,16 @@ export async function evaluateLegacyRotationOutcome(
         },
       });
 
+      void emitMetricEvent(config.metricsHook, {
+        name: "password.rotation.evaluations",
+        type: "counter",
+        value: 1,
+        attributes: {
+          outcome: "fail",
+          mode: "strategy",
+        },
+      });
+
       return {
         valid: false,
         reason: "PASSWORD_REUSED",
@@ -99,6 +120,16 @@ export async function evaluateLegacyRotationOutcome(
       },
     });
 
+    void emitMetricEvent(config.metricsHook, {
+      name: "password.rotation.evaluations",
+      type: "counter",
+      value: 1,
+      attributes: {
+        outcome: "pass",
+        mode: "strategy",
+      },
+    });
+
     return { valid: true };
   }
 
@@ -112,6 +143,16 @@ export async function evaluateLegacyRotationOutcome(
         details: {
           mode: "compareFn",
           historyLimit: config.historyLimit,
+        },
+      });
+
+      void emitMetricEvent(config.metricsHook, {
+        name: "password.rotation.evaluations",
+        type: "counter",
+        value: 1,
+        attributes: {
+          outcome: "fail",
+          mode: "compareFn",
         },
       });
 
@@ -136,6 +177,16 @@ export async function evaluateLegacyRotationOutcome(
     },
   });
 
+  void emitMetricEvent(config.metricsHook, {
+    name: "password.rotation.evaluations",
+    type: "counter",
+    value: 1,
+    attributes: {
+      outcome: "pass",
+      mode: "compareFn",
+    },
+  });
+
   return { valid: true };
 }
 
@@ -155,6 +206,16 @@ export function isPasswordExpiredLegacy(
     outcome: expired ? "fail" : "pass",
     details: {
       expiryDays: config.expiryDays,
+    },
+  });
+
+  void emitMetricEvent(config.metricsHook, {
+    name: "password.expiry.evaluations",
+    type: "counter",
+    value: 1,
+    attributes: {
+      outcome: expired ? "fail" : "pass",
+      mode: "isPasswordExpired",
     },
   });
 
@@ -336,6 +397,15 @@ export function isMinimumPasswordAgeSatisfiedLegacy(
     outcome: satisfied ? "pass" : "fail",
     details: {
       minimumPasswordAgeDays: config.minimumPasswordAgeDays,
+    },
+  });
+
+  void emitMetricEvent(config.metricsHook, {
+    name: "password.minimumPasswordAge.evaluations",
+    type: "counter",
+    value: 1,
+    attributes: {
+      outcome: satisfied ? "pass" : "fail",
     },
   });
 

@@ -34,6 +34,18 @@ npm run publish:npm
 
 Development-only vulnerabilities should still be triaged and upgraded regularly, especially for build and test tooling.
 
+## Audit Data Redaction Policy
+
+Audit callbacks are executed in fire-and-forget mode and are failure-isolated.
+
+- Every audit payload includes a dedicated `schemaVersion` field (separate from `policyVersion`).
+- Sensitive keys in `details` are redacted before callback execution.
+	- redacted key patterns include password/passphrase/secret/token/credential/plaintext/plain
+- Error objects are sanitized before emission.
+- Callback exceptions are swallowed to prevent policy-flow side effects.
+
+This policy is designed to guarantee that plaintext secrets are never forwarded through audit payloads produced by the library.
+
 ## Reporting a Security Issue
 
 Until a dedicated security contact is configured, open a private security advisory on the repository once GitHub is connected.
