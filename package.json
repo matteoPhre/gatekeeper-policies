@@ -25,6 +25,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "bench": "npm run build && node scripts/benchmark.mjs",
+    "bench:ci": "npm run build && node scripts/benchmark.mjs",
     "lint": "eslint 'src/**/*.ts'",
     "security:audit:prod": "npm audit --omit=dev",
     "security:audit:dev": "npm audit",

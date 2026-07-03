@@ -13,9 +13,14 @@ Legend:
 3. [x] Introduce strict error code unions.
 4. [x] Split IdentityPolicyEngine into the focused engines already present in `src/policy-core.ts`.
 5. [x] Introduce trace/debug evaluation support with opt-in zero-overhead tracing.
-6. [ ] Normalize async model across all public APIs.
+6. [x] Normalize async model across all public APIs.
+	- Decide whether sync methods (e.g. `validateComplexity`) stay sync by design or move to a consistent sync/async split, and document the rationale explicitly.
 7. [x] Add fail-open / fail-closed strategy configuration.
 8. [x] Enforce deep immutable configuration at runtime.
+9. [x] Define a formal deprecation path for boolean compatibility wrappers:
+	- `@deprecated` JSDoc annotations.
+	- optional runtime warning (opt-in, non-breaking).
+	- target version for removal.
 
 Current gap:
 - boolean compatibility wrappers still exist for host code that depends on them, but the typed decision methods are now the canonical API across the engine and adapter layer.
@@ -25,7 +30,9 @@ Current gap:
 1. [x] Add property-based testing for complexity validation, rotation logic, and expiry lifecycle.
 2. [x] Add contract tests for extension interfaces and external comparators.
 3. [x] Add determinism verification tests for same input -> same output.
-4. [ ] Add CI matrix for multiple Node.js LTS versions.
+4. [x] Add CI matrix for multiple Node.js LTS versions.
+5. [x] Add a benchmark suite with regression thresholds, so performance stability is tracked across releases in the same way correctness is.
+6. [x] Add targeted fuzzing for `constantTimeEqual` / `constantTimeStringEqual` to catch accidental timing-safety regressions introduced by future refactors.
 
 ## Phase 2 - Policy Hardening
 
@@ -70,6 +77,8 @@ Current gap:
 	- outcome
 	- structured metadata
 3. [x] Keep audit callback non-blocking and failure-isolated.
+4. [x] Define an explicit redaction/PII policy for audit payloads, guaranteeing plaintext passwords can never leak into audit events, including from unhandled exceptions inside custom hooks.
+5. [x] Introduce schema versioning for audit events themselves (distinct from `policyVersion`), so downstream consumers can handle breaking changes to the event shape.
 
 ## Phase 6 - Extension Isolation
 
@@ -86,6 +95,7 @@ Core must remain:
 
 Status:
 - [ ] still bundled in the core surface today; this is the main intentional gap before extraction.
+- [x] Define the extension interface contracts (`EntropyValidator`, `CompromisedPasswordChecker`) ahead of extraction, so the future external package can be a drop-in without requiring a breaking change in core.
 
 ## Phase 7 - Adapter Ecosystem
 
@@ -94,6 +104,19 @@ Status:
 	- Fastify
 	- custom runtime
 2. [x] Avoid framework coupling in core.
+
+## Phase 8 - Cross-Language Interoperability
+
+1. [x] Export a JSON Schema (or OpenAPI-style) representation of the `PolicyDecision` types, so non-TypeScript consumers (e.g. services in other languages) can validate against the same contract.
+
+## Phase 9 - Rate Limiting / Lockout Policies
+
+1. [x] Add support for tracking consecutive failed attempts.
+2. [x] Add configurable temporary lockout policy decisions, following the same typed-decision model used elsewhere in the engine.
+
+## Phase 10 - Advanced Observability
+
+1. [x] Add an optional metrics hook (counters/histograms) alongside the existing audit event, exposing a minimal interface compatible with common observability conventions (e.g. OpenTelemetry-shaped) without adding a hard dependency, consistent with the dependency-free core philosophy.
 
 ## Compatibility Commitment
 
@@ -109,5 +132,5 @@ The following must always hold:
 The remaining highest-priority work is:
 
 1. Keep the typed decision methods as the primary API and trim any remaining documentation references that suggest boolean helpers are the preferred path.
-2. Add the CI matrix for multiple Node.js LTS versions.
-3. Plan the phase-6 extraction of entropy and compromised-password checks into a future external package.
+2. Plan the phase-6 extraction of entropy and compromised-password checks into a future external package.
+3. Update playground examples to prioritize typed decision APIs and lockout/metrics hooks.

@@ -827,3 +827,54 @@ describe("IdentityPolicyEngine - config validation", () => {
     }).toThrow("expiryWarningDays must be a non-negative integer.");
   });
 });
+
+describe("IdentityPolicyEngine - legacy deprecation and metrics hooks", () => {
+  it("emits optional deprecation warnings for legacy boolean wrappers", async () => {
+    const warnSpy = vi
+      .spyOn(process, "emitWarning")
+      .mockImplementation(() => undefined);
+
+    const engine = new IdentityPolicyEngine({
+      deprecationWarnings: true,
+      persistence: createPersistenceMock(),
+    });
+
+    engine.isPasswordExpired("2026-03-01T00:00:00.000Z");
+    await engine.validateRotation("candidate", "user-1", async () => false);
+
+    expect(warnSpy).toHaveBeenCalled();
+    expect(
+      warnSpy.mock.calls.some((entry) =>
+        String(entry[0]).includes("isPasswordExpired is deprecated"),
+      ),
+    ).toBe(true);
+
+    warnSpy.mockRestore();
+  });
+
+  it("emits metrics events through the optional hook", async () => {
+    const metrics: Array<{ name: string; type: string; value: number }> = [];
+    const engine = new IdentityPolicyEngine({
+      metricsHook: (event) => {
+        metrics.push({
+          name: event.name,
+          type: event.type,
+          value: event.value,
+        });
+      },
+      persistence: createPersistenceMock(["h1"]),
+    });
+
+    engine.validateComplexity("short");
+    await engine.validateRotation("StrongPassword#2026", "user-1", async () => false);
+    engine.isPasswordExpired("2026-03-01T00:00:00.000Z");
+
+    expect(metrics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "password.complexity.evaluations", type: "counter" }),
+        expect.objectContaining({ name: "password.rotation.evaluations", type: "counter" }),
+        expect.objectContaining({ name: "password.expiry.evaluations", type: "counter" }),
+      ]),
+    );
+  });
+});

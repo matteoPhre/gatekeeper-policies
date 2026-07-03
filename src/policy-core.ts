@@ -1,6 +1,10 @@
 import type {
+  LockoutDecisionCode,
   PolicyDecision,
   PolicyEvaluationResult,
+  PasswordLockoutConfig,
+  PasswordLockoutState,
+  PasswordLockoutStateStore,
   PolicyTraceStep,
 } from "./types/interfaces.js";
 
@@ -428,6 +432,96 @@ export class PasswordExpiryEngine {
         trace,
       );
     }
+  }
+}
+
+export class PasswordLockoutEngine {
+  private readonly config: Readonly<PasswordLockoutConfig>;
+  private readonly store: Readonly<PasswordLockoutStateStore>;
+
+  public constructor(
+    config: PasswordLockoutConfig,
+    store: PasswordLockoutStateStore,
+  ) {
+    this.config = deepFreeze({ ...config });
+    this.store = deepFreeze({ ...store });
+  }
+
+  public async evaluateAttempt(
+    userId: string,
+    authenticationSucceeded: boolean,
+    options?: EvaluationOptions,
+  ): Promise<PolicyEvaluationResult<LockoutDecisionCode>> {
+    const { trace, add } = createTraceCollector(options?.trace);
+    const now = Date.now();
+    const lockoutDurationMs = this.config.lockoutDurationMinutes * 60 * 1000;
+    const current =
+      (await this.store.getState(userId)) ?? ({ consecutiveFailures: 0 } as PasswordLockoutState);
+    const lockoutUntilMs = current.lockoutUntil
+      ? new Date(current.lockoutUntil).getTime()
+      : Number.NaN;
+
+    if (Number.isFinite(lockoutUntilMs) && lockoutUntilMs > now) {
+      add("lockoutWindow", false, {
+        lockoutUntil: new Date(lockoutUntilMs).toISOString(),
+      });
+
+      return withTrace(
+        {
+          success: false,
+          reason: "ACCOUNT_TEMPORARILY_LOCKED",
+          meta: {
+            lockoutUntil: new Date(lockoutUntilMs).toISOString(),
+            consecutiveFailures: current.consecutiveFailures,
+          },
+        },
+        trace,
+      );
+    }
+
+    if (authenticationSucceeded) {
+      add("authenticationAttempt", true);
+
+      if (this.config.resetOnSuccess) {
+        await this.store.setState(userId, { consecutiveFailures: 0 });
+        add("resetFailures", true);
+      }
+
+      return withTrace({ success: true }, trace);
+    }
+
+    const consecutiveFailures = current.consecutiveFailures + 1;
+    add("authenticationAttempt", false, { consecutiveFailures });
+
+    if (consecutiveFailures >= this.config.maxFailedAttempts) {
+      const nextLockoutUntil = new Date(now + lockoutDurationMs).toISOString();
+      await this.store.setState(userId, {
+        consecutiveFailures,
+        lockoutUntil: nextLockoutUntil,
+      });
+      add("lockoutApplied", false, {
+        maxFailedAttempts: this.config.maxFailedAttempts,
+        lockoutUntil: nextLockoutUntil,
+      });
+
+      return withTrace(
+        {
+          success: false,
+          reason: "ACCOUNT_TEMPORARILY_LOCKED",
+          meta: {
+            consecutiveFailures,
+            lockoutUntil: nextLockoutUntil,
+            maxFailedAttempts: this.config.maxFailedAttempts,
+          },
+        },
+        trace,
+      );
+    }
+
+    await this.store.setState(userId, { consecutiveFailures });
+    add("persistFailureCounter", true, { consecutiveFailures });
+
+    return withTrace({ success: true }, trace);
   }
 }
 

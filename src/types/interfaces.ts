@@ -68,6 +68,7 @@ export type PasswordAuditEventType =
 
 export interface PasswordAuditEvent {
   type: PasswordAuditEventType;
+  schemaVersion: string;
   userId?: string;
   policyVersion: string;
   timestamp: string;
@@ -77,6 +78,21 @@ export interface PasswordAuditEvent {
 
 export type PasswordAuditEventCallback = (
   event: PasswordAuditEvent,
+) => Promise<void> | void;
+
+export type PasswordMetricType = "counter" | "histogram";
+
+export interface PasswordMetricEvent {
+  name: string;
+  type: PasswordMetricType;
+  value: number;
+  unit?: string;
+  attributes?: Record<string, string | number | boolean>;
+  timestamp: string;
+}
+
+export type PasswordMetricsHook = (
+  event: PasswordMetricEvent,
 ) => Promise<void> | void;
 
 export type PasswordValidationIssueCode =
@@ -113,6 +129,8 @@ export type PasswordEntropyValidator = (
   context: PasswordEntropyValidationContext,
 ) => Promise<PasswordEntropyValidationResult> | PasswordEntropyValidationResult;
 
+export type EntropyValidator = PasswordEntropyValidator;
+
 export interface PasswordCompromisedPasswordValidationContext {
   password: string;
   normalizedPassword: string;
@@ -130,9 +148,13 @@ export type PasswordCompromisedPasswordValidator = (
   | boolean
   | PasswordCompromisedPasswordValidationResult;
 
+export type CompromisedPasswordChecker = PasswordCompromisedPasswordValidator;
+
 export interface IdentityPolicyEngineOptions extends PasswordPolicyConfig {
   persistence: PasswordPersistenceCallbacks;
   auditEventCallback?: PasswordAuditEventCallback;
+  metricsHook?: PasswordMetricsHook;
+  deprecationWarnings?: boolean;
   entropyValidator?: PasswordEntropyValidator;
   compromisedPasswordValidator?: PasswordCompromisedPasswordValidator;
 }
@@ -261,8 +283,28 @@ export type CodeSendExpiryHook<
 export interface ResolvedIdentityPolicyEngineOptions extends Required<PasswordPolicyConfig> {
   persistence: PasswordPersistenceCallbacks;
   auditEventCallback?: PasswordAuditEventCallback;
+  metricsHook?: PasswordMetricsHook;
+  deprecationWarnings: boolean;
   entropyValidator?: PasswordEntropyValidator;
   compromisedPasswordValidator?: PasswordCompromisedPasswordValidator;
+}
+
+export type LockoutDecisionCode = "ACCOUNT_TEMPORARILY_LOCKED";
+
+export interface PasswordLockoutConfig {
+  maxFailedAttempts: number;
+  lockoutDurationMinutes: number;
+  resetOnSuccess: boolean;
+}
+
+export interface PasswordLockoutState {
+  consecutiveFailures: number;
+  lockoutUntil?: string;
+}
+
+export interface PasswordLockoutStateStore {
+  getState(userId: string): Promise<PasswordLockoutState | undefined>;
+  setState(userId: string, state: PasswordLockoutState): Promise<void>;
 }
 
 export type PolicyValidationSuccess = { valid: true };

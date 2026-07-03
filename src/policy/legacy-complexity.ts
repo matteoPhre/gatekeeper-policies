@@ -6,6 +6,7 @@ import type {
   ResolvedIdentityPolicyEngineOptions,
 } from "../types/interfaces.js";
 import { emitAuditEvent } from "../internal/audit.js";
+import { emitMetricEvent } from "../internal/metrics.js";
 import {
   hasRepeatedChars,
   hasSequentialChars,
@@ -144,6 +145,15 @@ export function validateLegacyComplexity(
     },
   });
 
+  void emitMetricEvent(config.metricsHook, {
+    name: "password.complexity.evaluations",
+    type: "counter",
+    value: 1,
+    attributes: {
+      outcome: result.isValid ? "pass" : "fail",
+    },
+  });
+
   return result;
 }
 
@@ -213,6 +223,15 @@ export async function validateLegacyComplexityWithExtensions(
     details: {
       mode: "extended",
       errorCount: result.errors.length,
+    },
+  });
+
+  void emitMetricEvent(config.metricsHook, {
+    name: "password.complexity.extended.evaluations",
+    type: "counter",
+    value: 1,
+    attributes: {
+      outcome: result.isValid ? "pass" : "fail",
     },
   });
 
