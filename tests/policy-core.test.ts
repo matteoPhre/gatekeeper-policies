@@ -3,6 +3,7 @@ import {
   IdentityPolicyEngine,
   PasswordComplexityEngine,
   PasswordExpiryEngine,
+  PasswordLockoutEngine,
   PasswordRotationEngine,
   type PasswordRule,
 } from "../src/policy-core";
@@ -163,5 +164,65 @@ describe("policy-core architecture", () => {
     const result = await expiry.evaluate("not-a-date");
 
     expect(result.success).toBe(true);
+  });
+
+  it("tracks failed attempts and returns typed lockout decision", async () => {
+    const stateStore = new Map<string, { consecutiveFailures: number; lockoutUntil?: string }>();
+    const lockout = new PasswordLockoutEngine(
+      {
+        maxFailedAttempts: 3,
+        lockoutDurationMinutes: 15,
+        resetOnSuccess: true,
+      },
+      {
+        getState: async (userId) => stateStore.get(userId),
+        setState: async (userId, state) => {
+          stateStore.set(userId, state);
+        },
+      },
+    );
+
+    await lockout.evaluateAttempt("user-1", false);
+    await lockout.evaluateAttempt("user-1", false);
+    const thirdAttempt = await lockout.evaluateAttempt("user-1", false, {
+      trace: true,
+    });
+
+    expect(thirdAttempt.success).toBe(false);
+    if (!thirdAttempt.success) {
+      expect(thirdAttempt.reason).toBe("ACCOUNT_TEMPORARILY_LOCKED");
+      expect(thirdAttempt.meta).toEqual(
+        expect.objectContaining({
+          consecutiveFailures: 3,
+          maxFailedAttempts: 3,
+          lockoutUntil: expect.any(String),
+        }),
+      );
+    }
+
+    expect(thirdAttempt.trace?.some((step) => step.step === "lockoutApplied")).toBe(true);
+  });
+
+  it("resets lockout counters on success when configured", async () => {
+    const stateStore = new Map<string, { consecutiveFailures: number; lockoutUntil?: string }>();
+    const lockout = new PasswordLockoutEngine(
+      {
+        maxFailedAttempts: 4,
+        lockoutDurationMinutes: 10,
+        resetOnSuccess: true,
+      },
+      {
+        getState: async (userId) => stateStore.get(userId),
+        setState: async (userId, state) => {
+          stateStore.set(userId, state);
+        },
+      },
+    );
+
+    await lockout.evaluateAttempt("user-2", false);
+    await lockout.evaluateAttempt("user-2", false);
+    await lockout.evaluateAttempt("user-2", true);
+
+    expect(stateStore.get("user-2")).toEqual({ consecutiveFailures: 0 });
   });
 });

@@ -37,6 +37,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Benchmark regression thresholds
+        run: npm run bench:ci
+
       - name: Security audit (production dependencies)
         run: npm run security:audit:prod
 

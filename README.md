@@ -15,6 +15,18 @@ Persistence and request extraction are delegated to the host application through
 - `IdentityPolicyEngine` remains as a compatibility facade for legacy integrations.
 - Prefer the typed `evaluate*` methods when you want structured outcomes and reasons.
 - Transport adapters accept typed expiry decisions first.
+- Legacy wrapper methods are deprecated and planned for removal in `v2.0.0`.
+- Optional `metricsHook` provides non-blocking counter/histogram events.
+
+## Sync/Async Model
+
+The public API intentionally follows a split model:
+
+- synchronous methods for pure in-memory policy checks (for example local complexity and date-window evaluations)
+- asynchronous methods when persistence or external verifiers are involved (history checks, extension validators)
+
+This preserves low overhead for deterministic local checks while avoiding fake async wrappers where no I/O exists.
+Typed `evaluate*` methods are the canonical API surface for new integrations.
 
 ## Scope
 
@@ -77,6 +89,7 @@ Available scripts:
 - `npm run security:audit:dev`: audits full development dependency tree
 - `npm run security:pack`: verifies package contents with `npm pack --dry-run`
 - `npm run release:check`: build + tests + production audit + package dry run
+- `npm run bench`: benchmark suite with regression thresholds
 
 ## Versioning
 
@@ -226,10 +239,14 @@ These examples are intended as implementation references and do not introduce fr
 - `persistence.saveNewPassword(userId, newHash)`
 - `persistence.getPreviousPasswordSubstrings(userId)` when substring blocking is enabled
 - `auditEventCallback(event)` for compliance logging and observability hooks
+- `metricsHook(event)` for optional counters/histograms (OpenTelemetry-shaped fields, dependency-free)
+- `deprecationWarnings` (`false` by default) to emit runtime warnings for deprecated legacy wrappers
 - `entropyValidator(context)` for optional host-managed entropy/strength checks
 - `compromisedPasswordValidator(context)` for optional host-managed breach checks
 
-`auditEventCallback` is optional and fire-and-forget: the engine clones each event before invoking the callback, enriches it with `policyVersion` and `timestamp`, and ignores callback failures so validation behavior stays deterministic.
+`auditEventCallback` is optional and fire-and-forget: the engine clones each event before invoking the callback, enriches it with `schemaVersion`, `policyVersion`, and `timestamp`, redacts sensitive detail keys (for example password/secret/token), and ignores callback failures so validation behavior stays deterministic.
+
+Migration details from deprecated wrappers to typed methods are documented in `MIGRATION.md`.
 
 ### 2. Complexity Validation
 

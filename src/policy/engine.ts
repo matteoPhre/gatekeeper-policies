@@ -222,6 +222,8 @@ export function resolveEngineOptions(
       DEFAULT_POLICY_CONFIG.minPreviousSecretSubstringLength,
     persistence: options.persistence,
     auditEventCallback: options.auditEventCallback,
+    metricsHook: options.metricsHook,
+    deprecationWarnings: options.deprecationWarnings ?? false,
     entropyValidator: options.entropyValidator,
     compromisedPasswordValidator: options.compromisedPasswordValidator,
   };
@@ -316,6 +318,10 @@ export function resolveEngineOptions(
     throw new TypeError(
       "getPreviousPasswordSubstrings persistence callback is required when blockSubstringsFromPreviousSecrets is enabled.",
     );
+  }
+
+  if (typeof config.deprecationWarnings !== "boolean") {
+    throw new TypeError("deprecationWarnings must be a boolean.");
   }
 
   return deepFreeze(config);
