@@ -40,17 +40,21 @@ export class IdentityPolicyEngine {
     return this.config;
   }
 
+  private warnDeprecated(methodName: string, replacement: string): void {
+    emitDeprecationWarning(
+      this.config.deprecationWarnings,
+      methodName,
+      replacement,
+      "v2.0.0",
+    );
+  }
+
   /**
    * @deprecated Use evaluateComplexityOutcome for typed decision results.
    * Planned removal: v2.0.0.
    */
   validateComplexity(password: string): ComplexityValidationResult {
-    emitDeprecationWarning(
-      this.config.deprecationWarnings,
-      "validateComplexity",
-      "evaluateComplexityOutcome",
-      "v2.0.0",
-    );
+    this.warnDeprecated("validateComplexity", "evaluateComplexityOutcome");
 
     return validateLegacyComplexity(password, this.config);
   }
@@ -101,12 +105,7 @@ export class IdentityPolicyEngine {
     userId: string,
     comparator: PasswordHistoryComparator,
   ): Promise<boolean> {
-    emitDeprecationWarning(
-      this.config.deprecationWarnings,
-      "validateRotation",
-      "evaluateRotationOutcome",
-      "v2.0.0",
-    );
+    this.warnDeprecated("validateRotation", "evaluateRotationOutcome");
 
     const outcome = await this.evaluateRotationOutcome(
       plainPassword,
@@ -122,12 +121,7 @@ export class IdentityPolicyEngine {
    * Planned removal: v2.0.0.
    */
   isPasswordExpired(passwordCreatedAt: PasswordCreatedAtInput): boolean {
-    emitDeprecationWarning(
-      this.config.deprecationWarnings,
-      "isPasswordExpired",
-      "evaluatePasswordExpiryDecision",
-      "v2.0.0",
-    );
+    this.warnDeprecated("isPasswordExpired", "evaluatePasswordExpiryDecision");
 
     return isPasswordExpiredLegacy(passwordCreatedAt, this.config);
   }
@@ -137,12 +131,7 @@ export class IdentityPolicyEngine {
    * Planned removal: v2.0.0.
    */
   daysUntilExpiry(passwordCreatedAt: PasswordCreatedAtInput): number {
-    emitDeprecationWarning(
-      this.config.deprecationWarnings,
-      "daysUntilExpiry",
-      "evaluateExpiryState",
-      "v2.0.0",
-    );
+    this.warnDeprecated("daysUntilExpiry", "evaluateExpiryState");
 
     return daysUntilExpiryLegacy(passwordCreatedAt, this.config);
   }
@@ -158,12 +147,7 @@ export class IdentityPolicyEngine {
    * Planned removal: v2.0.0.
    */
   isWithinGracePeriod(passwordCreatedAt: PasswordCreatedAtInput): boolean {
-    emitDeprecationWarning(
-      this.config.deprecationWarnings,
-      "isWithinGracePeriod",
-      "evaluateExpiryState",
-      "v2.0.0",
-    );
+    this.warnDeprecated("isWithinGracePeriod", "evaluateExpiryState");
 
     return isWithinGracePeriodLegacy(passwordCreatedAt, this.config);
   }
@@ -175,12 +159,7 @@ export class IdentityPolicyEngine {
   daysRemainingInGracePeriod(
     passwordCreatedAt: PasswordCreatedAtInput,
   ): number {
-    emitDeprecationWarning(
-      this.config.deprecationWarnings,
-      "daysRemainingInGracePeriod",
-      "evaluateExpiryState",
-      "v2.0.0",
-    );
+    this.warnDeprecated("daysRemainingInGracePeriod", "evaluateExpiryState");
 
     return daysRemainingInGracePeriodLegacy(passwordCreatedAt, this.config);
   }
@@ -192,12 +171,7 @@ export class IdentityPolicyEngine {
   isMinimumPasswordAgeSatisfied(
     passwordCreatedAt: PasswordCreatedAtInput,
   ): boolean {
-    emitDeprecationWarning(
-      this.config.deprecationWarnings,
-      "isMinimumPasswordAgeSatisfied",
-      "evaluateMinimumPasswordAgeDecision",
-      "v2.0.0",
-    );
+    this.warnDeprecated("isMinimumPasswordAgeSatisfied", "evaluateMinimumPasswordAgeDecision");
 
     return isMinimumPasswordAgeSatisfiedLegacy(passwordCreatedAt, this.config);
   }

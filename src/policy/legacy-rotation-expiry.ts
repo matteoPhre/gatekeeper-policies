@@ -7,8 +7,7 @@ import type {
   PasswordRotationValidationOutcome,
   ResolvedIdentityPolicyEngineOptions,
 } from "../types/interfaces.js";
-import { emitAuditEvent } from "../internal/audit.js";
-import { emitMetricEvent } from "../internal/metrics.js";
+import { emitPolicyObservation } from "../internal/observability.js";
 import {
   hasBlockedPreviousSecretSubstring,
   isPasswordCompareFn,
@@ -36,25 +35,30 @@ export async function evaluateLegacyRotationOutcome(
         config,
       )
     ) {
-      void emitAuditEvent(config.auditEventCallback, {
-        type: "rotation",
-        userId,
-        outcome: "fail",
-        details: {
-          mode: "previousSubstring",
-          historyLimit: config.historyLimit,
+      emitPolicyObservation(
+        {
+          auditEventCallback: config.auditEventCallback,
+          metricsHook: config.metricsHook,
         },
-      });
-
-      void emitMetricEvent(config.metricsHook, {
-        name: "password.rotation.evaluations",
-        type: "counter",
-        value: 1,
-        attributes: {
+        {
+          type: "rotation",
+          userId,
           outcome: "fail",
-          mode: "previousSubstring",
+          details: {
+            mode: "previousSubstring",
+            historyLimit: config.historyLimit,
+          },
         },
-      });
+        {
+          name: "password.rotation.evaluations",
+          type: "counter",
+          value: 1,
+          attributes: {
+            outcome: "fail",
+            mode: "previousSubstring",
+          },
+        },
+      );
 
       return {
         valid: false,
@@ -80,25 +84,30 @@ export async function evaluateLegacyRotationOutcome(
     });
 
     if (isReused) {
-      void emitAuditEvent(config.auditEventCallback, {
-        type: "rotation",
-        userId,
-        outcome: "fail",
-        details: {
-          mode: "strategy",
-          historyLimit: config.historyLimit,
+      emitPolicyObservation(
+        {
+          auditEventCallback: config.auditEventCallback,
+          metricsHook: config.metricsHook,
         },
-      });
-
-      void emitMetricEvent(config.metricsHook, {
-        name: "password.rotation.evaluations",
-        type: "counter",
-        value: 1,
-        attributes: {
+        {
+          type: "rotation",
+          userId,
           outcome: "fail",
-          mode: "strategy",
+          details: {
+            mode: "strategy",
+            historyLimit: config.historyLimit,
+          },
         },
-      });
+        {
+          name: "password.rotation.evaluations",
+          type: "counter",
+          value: 1,
+          attributes: {
+            outcome: "fail",
+            mode: "strategy",
+          },
+        },
+      );
 
       return {
         valid: false,
@@ -110,25 +119,30 @@ export async function evaluateLegacyRotationOutcome(
       };
     }
 
-    void emitAuditEvent(config.auditEventCallback, {
-      type: "rotation",
-      userId,
-      outcome: "pass",
-      details: {
-        mode: "strategy",
-        historyLimit: config.historyLimit,
+    emitPolicyObservation(
+      {
+        auditEventCallback: config.auditEventCallback,
+        metricsHook: config.metricsHook,
       },
-    });
-
-    void emitMetricEvent(config.metricsHook, {
-      name: "password.rotation.evaluations",
-      type: "counter",
-      value: 1,
-      attributes: {
+      {
+        type: "rotation",
+        userId,
         outcome: "pass",
-        mode: "strategy",
+        details: {
+          mode: "strategy",
+          historyLimit: config.historyLimit,
+        },
       },
-    });
+      {
+        name: "password.rotation.evaluations",
+        type: "counter",
+        value: 1,
+        attributes: {
+          outcome: "pass",
+          mode: "strategy",
+        },
+      },
+    );
 
     return { valid: true };
   }
@@ -136,25 +150,30 @@ export async function evaluateLegacyRotationOutcome(
   for (const previousHash of limitedHistory) {
     const isReused = await comparator(normalizedPlainPassword, previousHash);
     if (isReused) {
-      void emitAuditEvent(config.auditEventCallback, {
-        type: "rotation",
-        userId,
-        outcome: "fail",
-        details: {
-          mode: "compareFn",
-          historyLimit: config.historyLimit,
+      emitPolicyObservation(
+        {
+          auditEventCallback: config.auditEventCallback,
+          metricsHook: config.metricsHook,
         },
-      });
-
-      void emitMetricEvent(config.metricsHook, {
-        name: "password.rotation.evaluations",
-        type: "counter",
-        value: 1,
-        attributes: {
+        {
+          type: "rotation",
+          userId,
           outcome: "fail",
-          mode: "compareFn",
+          details: {
+            mode: "compareFn",
+            historyLimit: config.historyLimit,
+          },
         },
-      });
+        {
+          name: "password.rotation.evaluations",
+          type: "counter",
+          value: 1,
+          attributes: {
+            outcome: "fail",
+            mode: "compareFn",
+          },
+        },
+      );
 
       return {
         valid: false,
@@ -167,25 +186,30 @@ export async function evaluateLegacyRotationOutcome(
     }
   }
 
-  void emitAuditEvent(config.auditEventCallback, {
-    type: "rotation",
-    userId,
-    outcome: "pass",
-    details: {
-      mode: "compareFn",
-      historyLimit: config.historyLimit,
+  emitPolicyObservation(
+    {
+      auditEventCallback: config.auditEventCallback,
+      metricsHook: config.metricsHook,
     },
-  });
-
-  void emitMetricEvent(config.metricsHook, {
-    name: "password.rotation.evaluations",
-    type: "counter",
-    value: 1,
-    attributes: {
+    {
+      type: "rotation",
+      userId,
       outcome: "pass",
-      mode: "compareFn",
+      details: {
+        mode: "compareFn",
+        historyLimit: config.historyLimit,
+      },
     },
-  });
+    {
+      name: "password.rotation.evaluations",
+      type: "counter",
+      value: 1,
+      attributes: {
+        outcome: "pass",
+        mode: "compareFn",
+      },
+    },
+  );
 
   return { valid: true };
 }
@@ -201,23 +225,28 @@ export function isPasswordExpiredLegacy(
 
   const expired = ageInMs >= maxAgeInMs;
 
-  void emitAuditEvent(config.auditEventCallback, {
-    type: "expiry",
-    outcome: expired ? "fail" : "pass",
-    details: {
-      expiryDays: config.expiryDays,
+  emitPolicyObservation(
+    {
+      auditEventCallback: config.auditEventCallback,
+      metricsHook: config.metricsHook,
     },
-  });
-
-  void emitMetricEvent(config.metricsHook, {
-    name: "password.expiry.evaluations",
-    type: "counter",
-    value: 1,
-    attributes: {
+    {
+      type: "expiry",
       outcome: expired ? "fail" : "pass",
-      mode: "isPasswordExpired",
+      details: {
+        expiryDays: config.expiryDays,
+      },
     },
-  });
+    {
+      name: "password.expiry.evaluations",
+      type: "counter",
+      value: 1,
+      attributes: {
+        outcome: expired ? "fail" : "pass",
+        mode: "isPasswordExpired",
+      },
+    },
+  );
 
   return expired;
 }
@@ -238,14 +267,29 @@ export function daysUntilExpiryLegacy(
 
   const days = Math.ceil(remainingMs / MS_PER_DAY);
 
-  void emitAuditEvent(config.auditEventCallback, {
-    type: "expiry",
-    outcome: "info",
-    details: {
-      mode: "daysUntilExpiry",
-      days,
+  emitPolicyObservation(
+    {
+      auditEventCallback: config.auditEventCallback,
+      metricsHook: config.metricsHook,
     },
-  });
+    {
+      type: "expiry",
+      outcome: "info",
+      details: {
+        mode: "daysUntilExpiry",
+        days,
+      },
+    },
+    {
+      name: "password.expiry.evaluations",
+      type: "counter",
+      value: 1,
+      attributes: {
+        outcome: "info",
+        mode: "daysUntilExpiry",
+      },
+    },
+  );
 
   return days;
 }
@@ -265,15 +309,30 @@ export function evaluateLegacyExpiryState(
       daysRemainingInGracePeriod,
     };
 
-    void emitAuditEvent(config.auditEventCallback, {
-      type: "gracePeriod",
-      outcome: "info",
-      details: {
-        state: result.state,
-        daysUntilExpiry: result.daysUntilExpiry,
-        daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
+    emitPolicyObservation(
+      {
+        auditEventCallback: config.auditEventCallback,
+        metricsHook: config.metricsHook,
       },
-    });
+      {
+        type: "gracePeriod",
+        outcome: "info",
+        details: {
+          state: result.state,
+          daysUntilExpiry: result.daysUntilExpiry,
+          daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
+        },
+      },
+      {
+        name: "password.expiry.evaluations",
+        type: "counter",
+        value: 1,
+        attributes: {
+          outcome: "info",
+          state: result.state,
+        },
+      },
+    );
 
     return result;
   }
@@ -285,15 +344,30 @@ export function evaluateLegacyExpiryState(
       daysRemainingInGracePeriod,
     };
 
-    void emitAuditEvent(config.auditEventCallback, {
-      type: "gracePeriod",
-      outcome: "info",
-      details: {
-        state: result.state,
-        daysUntilExpiry: result.daysUntilExpiry,
-        daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
+    emitPolicyObservation(
+      {
+        auditEventCallback: config.auditEventCallback,
+        metricsHook: config.metricsHook,
       },
-    });
+      {
+        type: "gracePeriod",
+        outcome: "info",
+        details: {
+          state: result.state,
+          daysUntilExpiry: result.daysUntilExpiry,
+          daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
+        },
+      },
+      {
+        name: "password.expiry.evaluations",
+        type: "counter",
+        value: 1,
+        attributes: {
+          outcome: "info",
+          state: result.state,
+        },
+      },
+    );
 
     return result;
   }
@@ -305,15 +379,30 @@ export function evaluateLegacyExpiryState(
       daysRemainingInGracePeriod,
     };
 
-    void emitAuditEvent(config.auditEventCallback, {
-      type: "expiry",
-      outcome: "info",
-      details: {
-        state: result.state,
-        daysUntilExpiry: result.daysUntilExpiry,
-        daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
+    emitPolicyObservation(
+      {
+        auditEventCallback: config.auditEventCallback,
+        metricsHook: config.metricsHook,
       },
-    });
+      {
+        type: "expiry",
+        outcome: "info",
+        details: {
+          state: result.state,
+          daysUntilExpiry: result.daysUntilExpiry,
+          daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
+        },
+      },
+      {
+        name: "password.expiry.evaluations",
+        type: "counter",
+        value: 1,
+        attributes: {
+          outcome: "info",
+          state: result.state,
+        },
+      },
+    );
 
     return result;
   }
@@ -324,15 +413,30 @@ export function evaluateLegacyExpiryState(
     daysRemainingInGracePeriod,
   };
 
-  void emitAuditEvent(config.auditEventCallback, {
-    type: "expiry",
-    outcome: "pass",
-    details: {
-      state: result.state,
-      daysUntilExpiry: result.daysUntilExpiry,
-      daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
+  emitPolicyObservation(
+    {
+      auditEventCallback: config.auditEventCallback,
+      metricsHook: config.metricsHook,
     },
-  });
+    {
+      type: "expiry",
+      outcome: "pass",
+      details: {
+        state: result.state,
+        daysUntilExpiry: result.daysUntilExpiry,
+        daysRemainingInGracePeriod: result.daysRemainingInGracePeriod,
+      },
+    },
+    {
+      name: "password.expiry.evaluations",
+      type: "counter",
+      value: 1,
+      attributes: {
+        outcome: "pass",
+        state: result.state,
+      },
+    },
+  );
 
   return result;
 }
@@ -392,22 +496,27 @@ export function isMinimumPasswordAgeSatisfiedLegacy(
 
   const satisfied = ageInMs >= minimumAgeInMs;
 
-  void emitAuditEvent(config.auditEventCallback, {
-    type: "minimumPasswordAge",
-    outcome: satisfied ? "pass" : "fail",
-    details: {
-      minimumPasswordAgeDays: config.minimumPasswordAgeDays,
+  emitPolicyObservation(
+    {
+      auditEventCallback: config.auditEventCallback,
+      metricsHook: config.metricsHook,
     },
-  });
-
-  void emitMetricEvent(config.metricsHook, {
-    name: "password.minimumPasswordAge.evaluations",
-    type: "counter",
-    value: 1,
-    attributes: {
+    {
+      type: "minimumPasswordAge",
       outcome: satisfied ? "pass" : "fail",
+      details: {
+        minimumPasswordAgeDays: config.minimumPasswordAgeDays,
+      },
     },
-  });
+    {
+      name: "password.minimumPasswordAge.evaluations",
+      type: "counter",
+      value: 1,
+      attributes: {
+        outcome: satisfied ? "pass" : "fail",
+      },
+    },
+  );
 
   return satisfied;
 }

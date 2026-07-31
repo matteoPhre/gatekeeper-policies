@@ -365,6 +365,16 @@ export function normalizePasswordInput(
   return normalizedValue;
 }
 
+export function normalizePasswordForPolicy(
+  value: string,
+  config: Pick<
+    ResolvedIdentityPolicyEngineOptions,
+    "normalizeTrim" | "normalizeUnicode" | "unicodeNormalizationForm"
+  >,
+): string {
+  return normalizePasswordInput(value, config);
+}
+
 function isValidUnicodeNormalizationForm(
   value: string,
 ): value is PasswordUnicodeNormalizationForm {
