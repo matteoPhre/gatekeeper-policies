@@ -7,6 +7,11 @@ import type {
   PasswordLockoutStateStore,
   PolicyTraceStep,
 } from "./types/interfaces.js";
+import {
+  hasRepeatedChars,
+  hasSequentialChars,
+  normalizePasswordForPolicy,
+} from "./policy/engine.js";
 
 export type PasswordValidationCode =
   | "PASSWORD_TOO_SHORT"
@@ -124,57 +129,6 @@ function createTraceCollector(enabled: boolean | undefined): {
   };
 }
 
-function normalizePassword(
-  password: string,
-  config: Readonly<Pick<PasswordComplexityConfig, "normalizeTrim" | "normalizeUnicode" | "unicodeNormalizationForm">>,
-): string {
-  let normalized = password;
-  if (config.normalizeTrim) {
-    normalized = normalized.trim();
-  }
-  if (config.normalizeUnicode) {
-    normalized = normalized.normalize(config.unicodeNormalizationForm);
-  }
-  return normalized;
-}
-
-function hasRepeatedChars(password: string, threshold: number): boolean {
-  let runLength = 1;
-  for (let index = 1; index < password.length; index += 1) {
-    if (password[index] === password[index - 1]) {
-      runLength += 1;
-      if (runLength > threshold) {
-        return true;
-      }
-    } else {
-      runLength = 1;
-    }
-  }
-  return false;
-}
-
-function hasSequentialChars(password: string, threshold: number): boolean {
-  if (password.length < threshold) {
-    return false;
-  }
-
-  let ascendingRun = 1;
-  let descendingRun = 1;
-  for (let index = 1; index < password.length; index += 1) {
-    const previous = password.charCodeAt(index - 1);
-    const current = password.charCodeAt(index);
-    const diff = current - previous;
-
-    ascendingRun = diff === 1 ? ascendingRun + 1 : 1;
-    descendingRun = diff === -1 ? descendingRun + 1 : 1;
-
-    if (ascendingRun >= threshold || descendingRun >= threshold) {
-      return true;
-    }
-  }
-  return false;
-}
-
 export class PasswordComplexityEngine {
   private readonly config: Readonly<PasswordComplexityConfig>;
 
@@ -191,7 +145,7 @@ export class PasswordComplexityEngine {
     options?: EvaluationOptions,
   ): Promise<PolicyEvaluationResult<PasswordValidationCode>> {
     const { trace, add } = createTraceCollector(options?.trace);
-    const normalizedPassword = normalizePassword(password, this.config);
+    const normalizedPassword = normalizePasswordForPolicy(password, this.config);
 
     const fail = (
       step: string,
@@ -205,77 +159,137 @@ export class PasswordComplexityEngine {
       );
     };
 
-    if (normalizedPassword.length < this.config.minLength) {
-      return fail("minLength", "PASSWORD_TOO_SHORT", {
-        minLength: this.config.minLength,
-        actualLength: normalizedPassword.length,
-      });
-    }
-    add("minLength", true);
+    const validationSteps: Array<{
+      step: string;
+      run: () => Promise<PolicyEvaluationResult<PasswordValidationCode> | undefined> | PolicyEvaluationResult<PasswordValidationCode> | undefined;
+    }> = [
+      {
+        step: "minLength",
+        run: () => {
+          if (normalizedPassword.length < this.config.minLength) {
+            return fail("minLength", "PASSWORD_TOO_SHORT", {
+              minLength: this.config.minLength,
+              actualLength: normalizedPassword.length,
+            });
+          }
 
-    if (normalizedPassword.length > this.config.maxLength) {
-      return fail("maxLength", "PASSWORD_TOO_LONG", {
-        maxLength: this.config.maxLength,
-        actualLength: normalizedPassword.length,
-      });
-    }
-    add("maxLength", true);
+          return undefined;
+        },
+      },
+      {
+        step: "maxLength",
+        run: () => {
+          if (normalizedPassword.length > this.config.maxLength) {
+            return fail("maxLength", "PASSWORD_TOO_LONG", {
+              maxLength: this.config.maxLength,
+              actualLength: normalizedPassword.length,
+            });
+          }
 
-    if (this.config.requireUppercase && !/[A-Z]/.test(normalizedPassword)) {
-      return fail("uppercase", "PASSWORD_NO_UPPERCASE");
-    }
-    add("uppercase", true);
+          return undefined;
+        },
+      },
+      {
+        step: "uppercase",
+        run: () => {
+          if (this.config.requireUppercase && !/[A-Z]/.test(normalizedPassword)) {
+            return fail("uppercase", "PASSWORD_NO_UPPERCASE");
+          }
 
-    if (this.config.requireLowercase && !/[a-z]/.test(normalizedPassword)) {
-      return fail("lowercase", "PASSWORD_NO_LOWERCASE");
-    }
-    add("lowercase", true);
+          return undefined;
+        },
+      },
+      {
+        step: "lowercase",
+        run: () => {
+          if (this.config.requireLowercase && !/[a-z]/.test(normalizedPassword)) {
+            return fail("lowercase", "PASSWORD_NO_LOWERCASE");
+          }
 
-    if (this.config.requireNumbers && !/[0-9]/.test(normalizedPassword)) {
-      return fail("number", "PASSWORD_NO_NUMBER");
-    }
-    add("number", true);
+          return undefined;
+        },
+      },
+      {
+        step: "number",
+        run: () => {
+          if (this.config.requireNumbers && !/[0-9]/.test(normalizedPassword)) {
+            return fail("number", "PASSWORD_NO_NUMBER");
+          }
 
-    if (
-      this.config.requireSymbols &&
-      !/[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/.test(normalizedPassword)
-    ) {
-      return fail("symbol", "PASSWORD_NO_SYMBOL");
-    }
-    add("symbol", true);
+          return undefined;
+        },
+      },
+      {
+        step: "symbol",
+        run: () => {
+          if (
+            this.config.requireSymbols &&
+            !/[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/.test(normalizedPassword)
+          ) {
+            return fail("symbol", "PASSWORD_NO_SYMBOL");
+          }
 
-    const lowerPassword = normalizedPassword.toLowerCase();
-    for (const denyEntry of this.config.denyList) {
-      const normalizedEntry = normalizePassword(denyEntry, this.config)
-        .trim()
-        .toLowerCase();
-      if (normalizedEntry.length > 0 && lowerPassword.includes(normalizedEntry)) {
-        return fail("denyList", "PASSWORD_SUBSTRING_MATCH", {
-          entry: normalizedEntry,
-        });
+          return undefined;
+        },
+      },
+      {
+        step: "denyList",
+        run: () => {
+          const lowerPassword = normalizedPassword.toLowerCase();
+          for (const denyEntry of this.config.denyList) {
+            const normalizedEntry = normalizePasswordForPolicy(denyEntry, this.config)
+              .trim()
+              .toLowerCase();
+            if (normalizedEntry.length > 0 && lowerPassword.includes(normalizedEntry)) {
+              return fail("denyList", "PASSWORD_SUBSTRING_MATCH", {
+                entry: normalizedEntry,
+              });
+            }
+          }
+
+          return undefined;
+        },
+      },
+      {
+        step: "repeatedChars",
+        run: () => {
+          if (
+            this.config.preventRepeatedChars &&
+            hasRepeatedChars(normalizedPassword, this.config.maxRepeatedChars)
+          ) {
+            return fail("repeatedChars", "PASSWORD_SUBSTRING_MATCH", {
+              maxRepeatedChars: this.config.maxRepeatedChars,
+            });
+          }
+
+          return undefined;
+        },
+      },
+      {
+        step: "sequentialChars",
+        run: () => {
+          if (
+            this.config.preventSequentialChars &&
+            hasSequentialChars(normalizedPassword, this.config.maxSequentialChars)
+          ) {
+            return fail("sequentialChars", "PASSWORD_SUBSTRING_MATCH", {
+              maxSequentialChars: this.config.maxSequentialChars,
+            });
+          }
+
+          return undefined;
+        },
+      },
+    ];
+
+    for (const validationStep of validationSteps) {
+      const decision = await validationStep.run();
+      if (decision) {
+        return decision;
       }
-    }
-    add("denyList", true);
 
-    if (
-      this.config.preventRepeatedChars &&
-      hasRepeatedChars(normalizedPassword, this.config.maxRepeatedChars)
-    ) {
-      return fail("repeatedChars", "PASSWORD_SUBSTRING_MATCH", {
-        maxRepeatedChars: this.config.maxRepeatedChars,
-      });
+      add(validationStep.step, true);
     }
-    add("repeatedChars", true);
-
-    if (
-      this.config.preventSequentialChars &&
-      hasSequentialChars(normalizedPassword, this.config.maxSequentialChars)
-    ) {
-      return fail("sequentialChars", "PASSWORD_SUBSTRING_MATCH", {
-        maxSequentialChars: this.config.maxSequentialChars,
-      });
-    }
-    add("sequentialChars", true);
 
     if (this.config.extensionRules && this.config.extensionRules.length > 0) {
       for (let index = 0; index < this.config.extensionRules.length; index += 1) {

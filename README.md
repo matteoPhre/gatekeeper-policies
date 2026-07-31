@@ -14,6 +14,7 @@ Persistence and request extraction are delegated to the host application through
 - `PolicyCore` is the primary typed engine surface.
 - `IdentityPolicyEngine` remains as a compatibility facade for legacy integrations.
 - Prefer the typed `evaluate*` methods when you want structured outcomes and reasons.
+- The modular `PolicyCore` engines (`PasswordComplexityEngine`, `PasswordRotationEngine`, `PasswordExpiryEngine`, `PasswordLockoutEngine`) are the recommended building blocks for new integrations.
 - Transport adapters accept typed expiry decisions first.
 - Legacy wrapper methods are deprecated and planned for removal in `v2.0.0`.
 - Optional `metricsHook` provides non-blocking counter/histogram events.
@@ -50,6 +51,7 @@ The project is split into logical modules under `src/`:
 
 Internal helpers (not part of the public surface, but relevant to behavior):
 - `src/internal/audit.ts`: fire-and-forget audit event dispatch used by the engine
+- `src/internal/observability.ts`: shared helper that emits audit and metric events consistently across evaluation paths
 - `src/policy/legacy-complexity.ts`: extracted legacy complexity evaluation helper
 - `src/policy/legacy-rotation-expiry.ts`: extracted legacy rotation and expiry helper
 
@@ -154,7 +156,30 @@ const expiryDecision = engine.evaluatePasswordExpiryDecision(
 
 For new code, use the typed `evaluate*` methods.
 
-### 2. Generic Pipeline Integration
+### 2. Typed PolicyCore Engines
+
+For new integrations, prefer the modular typed surface exposed under `PolicyCore`:
+
+```ts
+import { PolicyCore } from "@matteophre/gatekeeper-policies";
+
+const complexityEngine = new PolicyCore.PasswordComplexityEngine({
+	minLength: 12,
+	maxLength: 128,
+	requireUppercase: true,
+	requireLowercase: true,
+	requireNumbers: true,
+	requireSymbols: true,
+	denyList: [],
+	normalizeTrim: false,
+	normalizeUnicode: false,
+	unicodeNormalizationForm: "NFKC",
+});
+
+const result = await complexityEngine.evaluate("StrongPassword#2026");
+```
+
+### 3. Generic Pipeline Integration
 
 Use this mode for custom runtimes and in-house HTTP abstractions.
 
@@ -198,7 +223,7 @@ const middleware = createStatusJsonExpiryMiddleware<RequestShape, ResponseShape>
 });
 ```
 
-### 3. Framework Integration Examples
+### 4. Framework Integration Examples
 
 Reference examples are available in test files:
 
@@ -514,6 +539,7 @@ The repository includes:
 - contract tests for extension interfaces and comparator adapters: `tests/contracts.test.ts`
 - determinism verification tests for repeated evaluations: `tests/determinism.test.ts`
 - property-based quality gates for complexity, rotation, and expiry: `tests/property-based.test.ts`
+- observability helper tests for shared audit/metric emission: `tests/observability.test.ts`
 
 Current status:
 - all tests pass with Vitest
