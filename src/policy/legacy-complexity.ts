@@ -5,8 +5,7 @@ import type {
   PasswordValidationIssueCode,
   ResolvedIdentityPolicyEngineOptions,
 } from "../types/interfaces.js";
-import { emitAuditEvent } from "../internal/audit.js";
-import { emitMetricEvent } from "../internal/metrics.js";
+import { emitPolicyObservation } from "../internal/observability.js";
 import {
   hasRepeatedChars,
   hasSequentialChars,
@@ -135,24 +134,29 @@ export function validateLegacyComplexity(
     ...(issues.length > 0 ? { issues } : {}),
   };
 
-  void emitAuditEvent(config.auditEventCallback, {
-    type: "complexity",
-    outcome: result.isValid ? "pass" : "fail",
-    details: {
-      errorCount: result.errors.length,
-      minLength: config.minLength,
-      maxLength: config.maxLength,
+  emitPolicyObservation(
+    {
+      auditEventCallback: config.auditEventCallback,
+      metricsHook: config.metricsHook,
     },
-  });
-
-  void emitMetricEvent(config.metricsHook, {
-    name: "password.complexity.evaluations",
-    type: "counter",
-    value: 1,
-    attributes: {
+    {
+      type: "complexity",
       outcome: result.isValid ? "pass" : "fail",
+      details: {
+        errorCount: result.errors.length,
+        minLength: config.minLength,
+        maxLength: config.maxLength,
+      },
     },
-  });
+    {
+      name: "password.complexity.evaluations",
+      type: "counter",
+      value: 1,
+      attributes: {
+        outcome: result.isValid ? "pass" : "fail",
+      },
+    },
+  );
 
   return result;
 }
@@ -217,23 +221,28 @@ export async function validateLegacyComplexityWithExtensions(
     ...(issues.length > 0 ? { issues } : {}),
   };
 
-  void emitAuditEvent(config.auditEventCallback, {
-    type: "complexity",
-    outcome: result.isValid ? "pass" : "fail",
-    details: {
-      mode: "extended",
-      errorCount: result.errors.length,
+  emitPolicyObservation(
+    {
+      auditEventCallback: config.auditEventCallback,
+      metricsHook: config.metricsHook,
     },
-  });
-
-  void emitMetricEvent(config.metricsHook, {
-    name: "password.complexity.extended.evaluations",
-    type: "counter",
-    value: 1,
-    attributes: {
+    {
+      type: "complexity",
       outcome: result.isValid ? "pass" : "fail",
+      details: {
+        mode: "extended",
+        errorCount: result.errors.length,
+      },
     },
-  });
+    {
+      name: "password.complexity.extended.evaluations",
+      type: "counter",
+      value: 1,
+      attributes: {
+        outcome: result.isValid ? "pass" : "fail",
+      },
+    },
+  );
 
   return result;
 }
